@@ -9,7 +9,7 @@
 #
 # USAGE - Maintains SEC Information
 #
-# REQUIRES - NA
+# REQUIRES - Python 3.9<=
 #
 # SYSTEM - All
 #
@@ -30,6 +30,10 @@ import io
 import os
 import logging
 import pandas as pd
+
+#%%
+# Environmental Variables e.g. paths to files, api keys, credentials etc
+PATH_TO_SEC_DATA=os.environ['PATH_TO_SEC_DATA']
 #%%
 def download_zip_sec(url, save_path, chunk_size):
     try:
@@ -47,7 +51,6 @@ def download_zip_sec(url, save_path, chunk_size):
         pass
 #%%
 def download_url_sec(y, q, chunk_size=128):
-    path_to_data="C:/Users/jfimb/Documents/AlphaGenData"
     save_path=f"/data/sec{y}{q}.zip"
     url=""
     if y!=2021:
