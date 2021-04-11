@@ -1,5 +1,5 @@
 #--------------------------------------------------------
-# PROGRAM NAME - .py 
+# PROGRAM NAME - SECData.py 
 #
 # PROGRAMMER - J.F. Imbet, juan.imbet@upf.edu
 #
@@ -20,8 +20,15 @@
 #
 # DESCRIPTION - Imports data from the sec api and stores it in a database
 #			
-#			
+#
+# Log - 
+# 
+# 11/04/2021	
+# It turns out that the time reported in the SEC has an hour component that must
+# be taken into account, as daily values might not be unique. Also we need to double ensure that the
+# reference to the account is the most recent and not a rectification of a value		
 #--------------------p=E[mx]------------------------------
+
 #%%
 import requests 
 import zipfile
@@ -32,6 +39,8 @@ import pandas as pd
 from datetime import datetime, timedelta
 import numpy as np
 import pickle
+import pathlib
+import matplotlib.pyplot as plt
 #%%
 # Environmental Variables e.g. paths to files, api keys, credentials etc
 PATH_TO_SEC_DATA=os.environ['PATH_TO_SEC_DATA']
@@ -68,7 +77,7 @@ def download_url_sec(y, q, chunk_size=128):
 
 
 def update_all_data():
-    years=range(2021, datetime.today().year+1)
+    years=range(2009, datetime.today().year+1)
     quarters=[1,2,3,4]
     for y in years:
         for q in quarters:
@@ -77,16 +86,36 @@ def update_all_data():
 
 
 #%%
+#! Does not really work because the creation date does not appear
+def get_creation_dates():
+    years=range(2009, datetime.today().year+1)
+    quarters=[1,2,3,4]
+    dic_dates={}
+    for y in years:
+        for q in quarters:
+            main_path=os.path.join(PATH_TO_SEC_DATA, f"sec{y}{q}")
+            if os.path.exists(main_path):
+                dic={}
+                dates_created=[]
+                for name in ['num', 'sub', 'tag']:
+                    fname = pathlib.Path(os.path.join(main_path, f"{name}.txt"))
+                    ctime = datetime.fromtimestamp(fname.stat().st_ctime)
+                    dic[name]=ctime
+                    dates_created.append(ctime)
 
+            #When was this file available? 
+            dic_dates[f'{y}{q}']=max(dates_created)
+    return dic_dates
 
+#%%
 def prepare_sec(y,q):
     main_path=os.path.join(PATH_TO_SEC_DATA, f"sec{y}{q}")
     # If we dont have the folder we dont try to rpocess the data
     if not os.path.exists(main_path):
         return
-    num = pd.read_csv(os.path.join(main_path, "num.txt"), sep="\t")
-    sub = pd.read_csv(os.path.join(main_path, "sub.txt"), sep="\t")
-    tag = pd.read_csv(os.path.join(main_path, "tag.txt"), sep="\t")
+    num = pd.read_csv(os.path.join(main_path, "num.txt"), sep="\t", low_memory=False)
+    sub = pd.read_csv(os.path.join(main_path, "sub.txt"), sep="\t", low_memory=False)
+    tag = pd.read_csv(os.path.join(main_path, "tag.txt"), sep="\t", low_memory=False)
 
     # Sometimes files directly from SEC are empty, e.g. 2009q1 so we just break
     if len(num)==0:
@@ -102,9 +131,12 @@ def prepare_sec(y,q):
     # now we merge (inner join e.g. keep if _merge==3 in Stata) with sub
     df = pd.merge(num,sub,on='adsh')
 
+    df.accepted = df.accepted.apply(lambda x : x[:-11])
+
     # Keep only relevant variables
     relevant_variables=['cik', 'ddate', 'tag', 'value', 'qtrs', 'accepted']
     df=df[relevant_variables]
+
     df['t_day']=pd.to_datetime(df.accepted, format='%Y-%m-%d')
 
     # Now, info is only available to the public until next day of being accepted
@@ -190,5 +222,174 @@ def link_compustat_crsp():
     df=df.filter(['gvkey', 't_quarter', 'cik', 'datadate'])
     df=df.drop_duplicates(subset=['gvkey','t_quarter'], keep='last')
     df.to_csv(os.path.join(PATH_TO_SEC_DATA, "link.csv"), index=False)
+    
+# %%
+
+def prepare_compustat_data():
+    """
+    use "CompustatCRSP/Compustat Quarterly Short", clear
+    drop if oiadpq==.
+    drop if atq==.
+    drop if cheq==.
+    drop if seqq==.
+    gen t_quarter=yq(year(datadate), quarter(datadate))
+    format %tq t_quarter
+    duplicates drop gvkey t_quarter, force
+    merge 1:1 gvkey t_quarter using "CompustatCRSP/link"
+    keep if _merge==3
+    drop _merge
+    // Compute the required variables
+    sort gvkey t_quarter
+    rename oiadpq voiadpq
+    rename seqq vseqq
+    rename cheq vcheq
+    rename atq vatq
+    rename cshoq vcshoq
+    rename datadate t_day
+    destring cik, force replace
+    //For compustat the information is available for investors 6 months later
+    sort cik t_day
+    replace t_day=t_day+30*6
+    keep cik t_day vatq vcheq vcshoq voiadpq vseqq
+    save compustat_data, replace
+    """
+    df=pd.read_stata(os.path.join(PATH_TO_COMPUSTAT_CRSP_DATA,"Compustat Quarterly Short.dta"))
+
+    df=df[ (df.oiadpq !='') &
+        (df.atq    !='') &
+        (df.cheq   !='') &
+        (df.seqq   !='') ]
+
+    df=df.rename(columns={'datacqtr': 't_quarter'})
+    df=df.drop_duplicates(subset=['gvkey','t_quarter'], keep='last')
+
+    df_link=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "link.csv"))
+    
+
+    df.gvkey = pd.to_numeric(df.gvkey)
+    df = pd.merge(df, df_link, on=['gvkey', 't_quarter'])
+
+    df=df.rename(columns={'datadate_x' : 't_day'})
+
+    df=df.filter(['cik', 't_day', 'atq', 'cheq', 'cshoq', 'oiadpq', 'seqq'], axis=1)
+
+
+    # We multiply by 1 million, this seems the difference
+    # example compustat 1195933,2015-12-27 ,2465.257, 155.74,11.426,23.175,702.555
+    # example sec       1195933,2015-05-08 ,2446702000.0,96434000.0,,,     707328000.0
+    var_scale=['atq', 'cheq', 'cshoq', 'oiadpq', 'seqq']
+    for var in var_scale:
+        df[var]=df[var]*1000000
+
+
+    # To avoid look ahead bias data moves 6 months, but we keep the infor of when is the report from
+    df['ddate']=df.t_day.apply(lambda x: x.strftime("%Y%m%d"))
+
+    df.t_day=df.t_day + timedelta(days=6*30)
+    df['source']='compustat'
+    df.to_csv(os.path.join(PATH_TO_SEC_DATA, "compustat_data.csv"), index=False)
+
 
 # %%
+def aggregate_sec_data():
+    years=range(2009, datetime.today().year+1)
+    quarters=[1,2,3,4]
+    df=pd.DataFrame()
+    for y in years:
+        for q in quarters:
+            print(f"{y} - {q}")
+            try:
+                to_append=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, 
+                                                    f"sec{y}{q}", "aggregated.csv"))
+                df=df.append(to_append)
+            except:
+                pass
+    df['source']='sec'
+    df.to_csv(os.path.join(PATH_TO_SEC_DATA, "sec_data.csv"), index=False)
+
+
+#%%
+# Append compustat to sec
+def append_compustat_sec():
+    """
+    # # Modifies the profitability by remoing the cumulative component
+    # # x is an entire row
+    #     by cik: replace voiadpq=voiadpq[_n]-(voiadpq[_n-1]+voiadpq[_n-2]+voiadpq[_n-3]) ///
+    #     if quarter(dofq(t_quarter[_n]))==4 ///
+    #                    & voiadpq[_n]!=. ///
+    #                    & voiadpq[_n-1]!=. ///
+    #                    & voiadpq[_n-2]!=. ///
+    #                    & voiadpq[_n-3]!=. ///
+    #                    & quarter(dofq(t_quarter[_n-1]))==3 ///
+    #                    & quarter(dofq(t_quarter[_n-2]))==2 ///
+    #                    & quarter(dofq(t_quarter[_n-3]))==1 
+    """
+    df        = pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "sec_data.csv"))
+
+    to_append = pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "compustat_data.csv"))
+
+    # I only want to append, when data is missing, 
+    # * I was trying appending before the minimum but this leads to missing quarters
+    # * Better to append and remove duplicates carefully
+
+    df = df.append(to_append)
+
+    df_link = pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "link.csv"))
+    df_link=df_link.drop_duplicates(subset=['cik'], keep='last')
+    df = pd.merge(df, df_link)
+
+    # An idea is once both sec and compustat data are available to keep only sec
+    df['is_sec']=0
+    df.loc[df.source == 'sec', 'is_sec']=1
+
+    # Cumulative sum per cik
+    # We sort by cik and date
+    df=df.sort_values(['cik', 't_day'])
+
+    df['cum_sec'] = df.groupby(['cik']).is_sec.cumsum()
+
+    df=df.drop(['is_sec'], axis=1) # drop is_sec
+    # So, if we have had already a sec report, we drop any compustat file
+    df=df[~ ( (df.cum_sec >= 1) & (df.source=='compustat'))]
+    df=df.drop(['cum_sec'], axis=1) # drop cum_sec
+    # We need a variable keeping track of the t_quarter to compute profitability
+    df.t_day=pd.to_datetime(df.t_day)
+    df['quarter'] = df.t_day.apply(lambda x : x.quarter)
+    df['year']    = df.t_day.apply(lambda x : x.year)
+
+    # Create temporally a lag of profitability, since they are cumulative, we compute the difference except the 
+    # first one
+  
+
+    df=df.sort_values(['cik', 't_day'])
+    df['max_ddate']=df.groupby(['cik']).ddate.cummax()
+    # Make sure the date reporting is not a revision
+    df=df[ ~ (df.ddate < df.max_ddate)]
+    df=df.drop(['max_ddate'], axis=1)
+
+    # plt.plot(df.t_day, df.oiadpq)
+    # plt.show()
+
+    #
+    #df.loc[df.quarter == 4, 'oiadpq'] = df.loc[df.quarter == 4, 'oiadpq'] -(df.loc[df.quarter == 4, 'l1oiadpq'] + df.loc[df.quarter == 4, 'l2oiadpq'] + df.loc[df.quarter == 4, 'l3oiadpq'])
+    
+    #df.loc[df.quarter != 1, 'oiadpq'] = df.loc[df.quarter != 1, 'l0oiadpq'] -df.loc[df.quarter != 1, 'l1oiadpq']
+    # #!* Debugging - track a simple company 
+    # df=df[df.cik==858877]
+    # df=df.sort_values(['t_day'])
+    # # Try now
+    # plt.plot(df.t_day, df.oiadpq/df.atq)
+    # plt.show()
+
+    # Keep only the releant variables
+    var_keep=['cik', 't_day', 'ddate', 'atq', 'cheq', 'cshoq', 'oiadpq', 'seqq',
+       'source', 'gvkey']
+    df=df.filter(var_keep, axis=1)
+
+    df.to_csv(os.path.join(PATH_TO_SEC_DATA, "fundamentals.csv"))
+    
+
+        
+
+
+
