@@ -386,10 +386,12 @@ def append_compustat_sec():
        'source', 'gvkey']
     df=df.filter(var_keep, axis=1)
 
-    df.to_csv(os.path.join(PATH_TO_SEC_DATA, "fundamentals.csv"))
+    df.to_csv(os.path.join(PATH_TO_SEC_DATA, "fundamentals.csv"), index=False)
     
 
         
 
 
 
+
+# %%

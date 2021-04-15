@@ -32,7 +32,7 @@ using Pickle
 using GLM
 
 include("analysis/Tools.jl")
-include("analysis/Simulation.jl")
+#include("analysis/Simulation.jl")
 
 function nasdaqInformation(df)
     # Adds Nasdaq
@@ -114,7 +114,7 @@ df=innerjoin(df, df2, on=[:time_span])
 # Good and bad times with the sp500
 peak=[maximum(df.sp500[1:i]) for i =1:size(df.sp500)[1]]
 
-df.bear=[ df.sp500[i]/peak[i] < 0.8 for i =1:size(df.sp500)[1]]
+df.bear=[ (df.sp500[i]/peak[i] < 0.8) & (df.ret[i]<0) for i =1:size(df.sp500)[1]]
 
 plot()
 for por in ["TRPF", "TRPL"]
