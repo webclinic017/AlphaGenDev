@@ -45,7 +45,7 @@ from multiprocessing import Process, Queue
 PATH_TO_SEC_DATA=os.environ['PATH_TO_SEC_DATA']
 PATH_TO_COMPUSTAT_CRSP_DATA=os.environ['PATH_TO_COMPUSTAT_CRSP_DATA']
 
-df_yahoo=pd.read_csv(os.path.join(PATH_TO_SEC_DATA,'yahoo_finance.csv'))
+df_yahoo=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, 'yahoo_finance', 'yahoo_finance1.csv'))
 df_yahoo=df_yahoo.rename(columns={'date' : 't_day'})
 df_yahoo=df_yahoo.rename(columns={'tic' : 'ticker'})
 df_yahoo.ticker=df_yahoo.ticker.apply(lambda x : x.lower())
@@ -61,4 +61,18 @@ df_link=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "cik_ticker.csv"))
 df=df_yahoo.merge(df_link, on=['ticker'])
 df=df.merge(df_sec, how='left',on=['cik', 't_day'])
 
+#%% Forward filling of the variables
+
+df=df.sort_values(['cik', 't_day'])
+
+to_ffill=['atq', 'cheq', 'cshoq', 'oiadpq', 'seqq']
+
+for var in to_ffill:
+    df[var] = df.groupby(['cik'])[var].ffill()
+
+# %%
+ # Some checks on that data
+
+ tic_unique=set(df.ticker)
+ tic_uniqueyf=set(df_yahoo.ticker)
 # %%

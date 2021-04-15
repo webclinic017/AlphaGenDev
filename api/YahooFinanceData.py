@@ -75,7 +75,7 @@ def get_yahoo_finance_data(t, id):
             
         except: 
             not_found+=1
-            t.set_description(f"{ticker.upper()} not processed - {not_found} in total")
+            t.set_description(f"{ticker} not processed - {not_found} in total")
             t.refresh() # to show immediately the update
             continue
 
@@ -89,10 +89,10 @@ if __name__=='__main__':
     start=time.time()
     df=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "cik_ticker.csv"))
 
-    tickers=df.ticker[:2500]
+    tickers=df.ticker[2500:7500]
 
     #print(len(tickers))
-    get_yahoo_finance_data(tickers, 1)
+    get_yahoo_finance_data(tickers, 2)
     #nb= 1 #os.cpu_count() The API breaks if we try more
     # batches=np.array_split(tickers,nb)
     # print(f"Batches of size {[len(batch) for batch in batches]}")
