@@ -39,7 +39,7 @@ from multiprocessing import Process, Queue
 
 
 
-def get_yahoo_finance_data(t):
+def get_yahoo_finance_data(t, id):
     PATH_TO_SEC_DATA=os.environ['PATH_TO_SEC_DATA']
     PATH_TO_COMPUSTAT_CRSP_DATA=os.environ['PATH_TO_COMPUSTAT_CRSP_DATA']
     t=tqdm(t)
@@ -79,7 +79,7 @@ def get_yahoo_finance_data(t):
             t.refresh() # to show immediately the update
             continue
 
-    yahoo_finance.to_csv(os.path.join(PATH_TO_SEC_DATA, "yahoo_finance",f"yahoo_finance.csv"), index=False)
+    yahoo_finance.to_csv(os.path.join(PATH_TO_SEC_DATA, "yahoo_finance",f"yahoo_finance{id}.csv"), index=False)
 
 
 if __name__=='__main__':
@@ -89,8 +89,10 @@ if __name__=='__main__':
     start=time.time()
     df=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "cik_ticker.csv"))
 
-    tickers=df.ticker #[:100]
-    get_yahoo_finance_data(tickers)
+    tickers=df.ticker[:2500]
+
+    #print(len(tickers))
+    get_yahoo_finance_data(tickers, 1)
     #nb= 1 #os.cpu_count() The API breaks if we try more
     # batches=np.array_split(tickers,nb)
     # print(f"Batches of size {[len(batch) for batch in batches]}")
