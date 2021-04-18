@@ -84,28 +84,23 @@ def update_all_data():
             download_url_sec(y,q)
 
 
-
-#%%
-#! Does not really work because the creation date does not appear
-def get_creation_dates():
-    years=range(2009, datetime.today().year+1)
-    quarters=[1,2,3,4]
-    dic_dates={}
-    for y in years:
-        for q in quarters:
-            main_path=os.path.join(PATH_TO_SEC_DATA, f"sec{y}{q}")
-            if os.path.exists(main_path):
-                dic={}
-                dates_created=[]
-                for name in ['num', 'sub', 'tag']:
-                    fname = pathlib.Path(os.path.join(main_path, f"{name}.txt"))
-                    ctime = datetime.fromtimestamp(fname.stat().st_ctime)
-                    dic[name]=ctime
-                    dates_created.append(ctime)
-
-            #When was this file available? 
-            dic_dates[f'{y}{q}']=max(dates_created)
-    return dic_dates
+# %%
+#* No longer necessary, as prepare_sec(y,q) keeps the value
+def get_sic_codes():
+    sics=pd.DataFrame()
+    for y in range(2009, datetime.today().year+1):
+        for q in range(1,5):
+            try:
+                df=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, f"sec{y}{q}", "sub.txt"), sep="\t")
+                df.accepted = df.accepted.apply(lambda x : x[:-11])
+                df['t_day']=pd.to_datetime(df.accepted, format='%Y-%m-%d')
+                # Now, info is only available to the public until next day of being accepted
+                df['t_day']=df['t_day']+timedelta(days=1)
+                df=df.filter(['cik', 'sic', 't_day'])
+                sics=sics.append(df)
+            except FileNotFoundError:
+                pass
+    return sics
 
 #%%
 def prepare_sec(y,q):
@@ -134,7 +129,7 @@ def prepare_sec(y,q):
     df.accepted = df.accepted.apply(lambda x : x[:-11])
 
     # Keep only relevant variables
-    relevant_variables=['cik', 'ddate', 'tag', 'value', 'qtrs', 'accepted']
+    relevant_variables=['cik', 'ddate', 'tag', 'value', 'qtrs', 'accepted', 'sic']
     df=df[relevant_variables]
 
     df['t_day']=pd.to_datetime(df.accepted, format='%Y-%m-%d')
@@ -163,7 +158,7 @@ def prepare_sec(y,q):
     df=df.drop(['accepted'], axis=1)
 
 
-    df=df.pivot_table(index=["cik", "t_day", 'ddate'], 
+    df=df.pivot_table(index=["cik", "t_day", 'ddate', 'sic'], 
                         columns='tag', 
                         values='v').reset_index()
             
@@ -255,10 +250,10 @@ def prepare_compustat_data():
     """
     df=pd.read_stata(os.path.join(PATH_TO_COMPUSTAT_CRSP_DATA,"Compustat Quarterly Short.dta"))
 
-    df=df[ (df.oiadpq !='') &
-        (df.atq    !='') &
-        (df.cheq   !='') &
-        (df.seqq   !='') ]
+    df=df[  (df.oiadpq !='') &
+            (df.atq    !='') &
+            (df.cheq   !='') &
+            (df.seqq   !='') ]
 
     df=df.rename(columns={'datacqtr': 't_quarter'})
     df=df.drop_duplicates(subset=['gvkey','t_quarter'], keep='last')
@@ -271,7 +266,7 @@ def prepare_compustat_data():
 
     df=df.rename(columns={'datadate_x' : 't_day'})
 
-    df=df.filter(['cik', 't_day', 'atq', 'cheq', 'cshoq', 'oiadpq', 'seqq'], axis=1)
+    df=df.filter(['cik', 't_day', 'atq', 'cheq', 'cshoq', 'oiadpq', 'seqq', 'sic'], axis=1)
 
 
     # We multiply by 1 million, this seems the difference

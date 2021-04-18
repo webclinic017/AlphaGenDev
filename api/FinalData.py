@@ -28,7 +28,7 @@
 #%%
 import pandas as pd 
 import numpy as np
-import datetime
+from datetime import datetime, timedelta, date
 import requests
 import urllib
 from tqdm.auto import tqdm
@@ -66,8 +66,9 @@ def append_yahoo_finance(tickers, id):
     #return df_yahoo
     df_yahoo.to_csv(os.path.join(PATH_TO_SEC_DATA, 'yahoo_finance', f"aggregated_yf{id}.csv"), index=False)
 
-# %%
 
+
+#%%
 def merge_yf_sec():
 # We start with the pricing data and then add the accouting data
     df_yahoo=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, 'yahoo_finance', 'aggregated_yf.csv'))
@@ -80,6 +81,7 @@ def merge_yf_sec():
     df=df.sort_values(['cik', 't_day'])
 
     df=df.merge(df_sec, how='left',on=['cik', 't_day'])
+
     to_ffill=['atq', 'cheq', 'cshoq', 'oiadpq', 'seqq']
 
     for var in to_ffill:
@@ -90,7 +92,7 @@ def merge_yf_sec():
 
     etfs=["IYW", "IXC", "IYH", "IDU", "IJU", "IAU", "QUAL", "EFG", "^GSPC"]
 
-    before = int(time.mktime(datetime.date(1990,1,1).timetuple()))# Some starting date so I dont download all
+    before = int(time.mktime(date(1990,1,1).timetuple()))# Some starting date so I dont download all
     today=int(time.time())
 
     for ticker in etfs:
@@ -115,6 +117,10 @@ def merge_yf_sec():
     icov=covariances['^GSPC_ret'].reset_index()
     df['beta']=icov['ret']/icov['^GSPC_ret']
 
+    #Carry forward the beta
+    df=df.sort_values(['cik', 't_day'])
+    df['beta'] = df.groupby(['cik'])['beta'].ffill()
+
     df['me']=df['adjclose']*df['cshoq']
 
     df['avg_size']=df.groupby(['cik'])[['me']].rolling(30, min_periods=0).mean().reset_index()['me'] #.unstack(2)
@@ -128,15 +134,22 @@ def merge_yf_sec():
   
     df['cash']=df['cheq']/df['atq']
 
-    # mret?
-    df['prc-21']=df.groupby(['cik']).adjclose.shift(21)
-    df['prc+21']=df.groupby(['cik']).adjclose.shift(-21)       
-    df['mret']=df['adjclose']/df['prc-21']-1.0
-    df['Fret']=df['prc+21']/df['adjclose']-1.0
-    # Stability of the data
-    temp=df[df.cik==320193]
+    df['avg_beta']=df.groupby(['cik'])[['beta']].rolling(30, min_periods=0).mean().reset_index()['beta'] #.unstack(2)
+   
 
-    plt.plot(temp.t_day, temp.ret)
+    # mret?
+    df['prc-7']=df.groupby(['cik']).adjclose.shift(7)
+    df['prc-21']=df.groupby(['cik']).adjclose.shift(21)
+    df['prc-180']=df.groupby(['cik']).adjclose.shift(180)
+
+    df['mret7']=df['adjclose']/df['prc-7']-1.0
+    df['mret21']=df['adjclose']/df['prc-21']-1.0
+    df['mret180']=df['adjclose']/df['prc-180']-1.0
+    #! No, forward variables only created at running time df['Fret']=df['prc+21']/df['adjclose']-1.0
+    # # Stability of the data
+    # temp=df[df.cik==320193]
+
+    # plt.plot(temp.t_day, temp.ret)
 
     tic_unique=set(df.ticker)
     #%%
@@ -155,7 +168,7 @@ def merge_yf_sec():
 
     # Save them year after year, we might use maximum data from 2 years for normal signal computations
     df['year']=df.t_day.apply(lambda x: int(x[:4]))
-    for y in tqdm(range(min(df.year), max(df.year))):
+    for y in tqdm(range(min(df.year), max(df.year)+1)):
         temp=df[df.year==y]
         temp.to_csv(os.path.join(PATH_TO_SEC_DATA, f'information_set{y}.csv' ), index=False)
 # %%
