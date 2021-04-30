@@ -62,7 +62,7 @@ forv t=`start'/`end'{
 
 	drop if adjclose<=5
 	// We need complete cases of firm characteristics
-	foreach var in Fexret me bm prof cash avg_beta mret7 mret21 mret180{
+	foreach var in me bm prof cash avg_beta mret7 mret21 mret180{
 	di "`var'"
 		winsor2 `var', replace cuts(0.5 99.5)
 	}
@@ -106,7 +106,7 @@ forv t=`start'/`end'{
 	local yy=year(`t')
 	local mm=month(`t')
 	local dd=day(`t')
-	save "`PATH_TO_SEC_DATA'\signals\v1\signal`yy'-`mm'-`dd'.dta", replace
+	save "`PATH_TO_SEC_DATA'\signals\v0\signal`yy'-`mm'-`dd'.dta", replace
 
 		}
 	}

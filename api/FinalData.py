@@ -82,11 +82,18 @@ def merge_yf_sec():
 
     df=df.merge(df_sec, how='left',on=['cik', 't_day'])
 
-    to_ffill=['atq', 'cheq', 'cshoq', 'oiadpq', 'seqq']
+    df=df.sort_values(['cik', 't_day'])
+
+    to_ffill=['atq', 'cheq', 'cshoq', 'oiadpq', 'seqq', 'sic']
 
     for var in to_ffill:
         df[var] = df.groupby(['cik'])[var].ffill()
 
+    
+    # sics=get_sic_codes()
+    # sics=sics.drop_duplicates(['cik'], keep='last').filter(['cik', 'sic'])
+
+    #df=pd.merge(df, sics, on=['cik'])
     # we need the sec or compustat data
     
 
@@ -111,7 +118,7 @@ def merge_yf_sec():
     
     # use asreg from stata for the beta
     df=df.sort_values(['cik', 't_day'])
-
+    temp=df[df.cik==320193]
     covariances=df.groupby(['cik'])[['ret', '^GSPC_ret']].rolling(252, min_periods=0).cov().unstack(2)
     
     icov=covariances['^GSPC_ret'].reset_index()
@@ -171,6 +178,9 @@ def merge_yf_sec():
     for y in tqdm(range(min(df.year), max(df.year)+1)):
         temp=df[df.year==y]
         temp.to_csv(os.path.join(PATH_TO_SEC_DATA, f'information_set{y}.csv' ), index=False)
+
+    # temp=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, f'information_set{2020}.csv' ))
+    # temp=temp[temp.cik ==320193 ]
 # %%
 def aggregate_yf_csv():
 

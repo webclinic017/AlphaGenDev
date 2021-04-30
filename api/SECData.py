@@ -26,7 +26,11 @@
 # 11/04/2021	
 # It turns out that the time reported in the SEC has an hour component that must
 # be taken into account, as daily values might not be unique. Also we need to double ensure that the
-# reference to the account is the most recent and not a rectification of a value		
+# reference to the account is the most recent and not a rectification of a value	
+# 
+# 
+# 22/04/2021
+# SIC codes did not appear on the compustat database we used, so im adding them from the SEC files	
 #--------------------p=E[mx]------------------------------
 
 #%%
@@ -282,6 +286,11 @@ def prepare_compustat_data():
 
     df.t_day=df.t_day + timedelta(days=6*30)
     df['source']='compustat'
+
+    sics=get_sic_codes()
+    sics=sics.drop_duplicates(['cik'], keep='last').filter(['cik', 'sic'])
+
+    df=pd.merge(df, sics, on=['cik'])
     df.to_csv(os.path.join(PATH_TO_SEC_DATA, "compustat_data.csv"), index=False)
 
 
@@ -378,7 +387,7 @@ def append_compustat_sec():
 
     # Keep only the releant variables
     var_keep=['cik', 't_day', 'ddate', 'atq', 'cheq', 'cshoq', 'oiadpq', 'seqq',
-       'source', 'gvkey']
+       'source', 'gvkey', 'sic']
     df=df.filter(var_keep, axis=1)
 
     df.to_csv(os.path.join(PATH_TO_SEC_DATA, "fundamentals.csv"), index=False)
@@ -390,3 +399,5 @@ def append_compustat_sec():
 
 
 # %%
+if __name__=='__main__':
+    append_compustat_sec()
