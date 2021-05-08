@@ -3,7 +3,7 @@
 #
 # PROGRAMMER - J.F. Imbet, juan.imbet@upf.edu
 #
-# VERSION - 0.0.1    [Mayor].[Minor].[Patch]
+# VERSION - 0.0.2    [Mayor].[Minor].[Patch]
 #
 # PROJECT - AlphaGen 
 #
@@ -21,8 +21,11 @@
 # DESCRIPTION - Joins the data from yahoo finance with the data from sec and compustat to have a single one 
 #			
 #
-# Log -  
-# 	
+# Log -  02/05/2021 
+# 	    At Filippo's pc, the data was moved to Users/Public folder so that he could also get access,
+#       environment variables PATH_TO_SEC_DATA was changed accordingly
+#
+#       In order to provide Filippo with the details of the data, I automatize the creation of the labels
 #--------------------p=E[mx]------------------------------
 
 #%%
@@ -97,7 +100,7 @@ def merge_yf_sec():
     # we need the sec or compustat data
     
 
-    etfs=["IYW", "IXC", "IYH", "IDU", "IJU", "IAU", "QUAL", "EFG", "^GSPC"]
+    etfs=["IYW", "IXC", "IYH", "IDU", "IJU", "IAU", "QUAL", "EFG", "^GSPC", "SPY"]
 
     before = int(time.mktime(date(1990,1,1).timetuple()))# Some starting date so I dont download all
     today=int(time.time())
@@ -161,7 +164,10 @@ def merge_yf_sec():
     tic_unique=set(df.ticker)
     #%%
 
-    # Compute market beta
+    # Compute weekly returns
+
+    df=df.sort_values(['cik', 't_day'])
+    df['retL5']=df.groupby(['cik']).adjclose.shift(0)/df.groupby(['cik']).adjclose.shift(5) - 1.0
 
     # Some analysis of the database?
     print(f"Memory Usage: {df.memory_usage()}")
@@ -171,8 +177,33 @@ def merge_yf_sec():
     #%%
     # Persistence, csv seems still like the best alternative
 
-    # build variables here
+    
+    """    
+    Adds the return information of SPY and GSPC into the information set files, this is done expost since there is no fundamental information on these indexes
+    """
+   
+    etfs=["^GSPC", "SPY"]
 
+    before = int(time.mktime(date(1990,1,1).timetuple()))# Some starting date so I dont download all
+    today=int(time.time())
+    to_append=pd.DataFrame()
+    for ticker in etfs:
+        url=f"https://query1.finance.yahoo.com/v7/finance/download/{ticker}?period1={before}&period2={today}&interval=1d&events=history&includeAdjustedClose=true"
+    
+        temp_df=pd.read_csv(url)
+        temp_df.loc[1:, (f'ret')]=temp_df['Adj Close'][1:].values/temp_df['Adj Close'][:-1].values-1.0
+
+        temp_df=temp_df.rename(columns={"Date": "date", "Open": "open", "High" : "high",
+                                            "Low" : "low", "Close" : "close", "Adj Close" : "adjclose",
+                                            "Volume" : "volume"})
+        temp_df=temp_df.rename(columns={'date' : 't_day'})
+        temp_df=temp_df.filter(['t_day', 'open', 'high', 'low', 'close', 'adjclose', 'volume', f'ret'])
+        
+        temp_df.to_csv(os.path.join(PATH_TO_SEC_DATA, "yahoo_finance", "data_etfs", f"{ticker}.csv"), index=False)
+        temp_df['ticker'] = ticker
+        to_append=to_append.append(temp_df)
+        
+    df=df.append(to_append)
     # Save them year after year, we might use maximum data from 2 years for normal signal computations
     df['year']=df.t_day.apply(lambda x: int(x[:4]))
     for y in tqdm(range(min(df.year), max(df.year)+1)):
@@ -181,6 +212,8 @@ def merge_yf_sec():
 
     # temp=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, f'information_set{2020}.csv' ))
     # temp=temp[temp.cik ==320193 ]
+
+
 # %%
 def aggregate_yf_csv():
 
@@ -194,6 +227,9 @@ def aggregate_yf_csv():
 
     df.to_csv(os.path.join(PATH_TO_SEC_DATA, 'yahoo_finance', f"aggregated_yf.csv"), index=False)
 
+
+
+#%%
 
 if __name__=='__main__':
     start=time.time()

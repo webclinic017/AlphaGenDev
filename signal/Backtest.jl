@@ -3,7 +3,7 @@
 #
 # PROGRAMMER - J.F. Imbet, juan.imbet@upf.edu
 #
-# VERSION - 0.1.1    [Mayor].[Minor].[Patch]
+# VERSION - 0.2.0    [Mayor].[Minor].[Patch]
 #
 # PROJECT - AlphaGen Backtests
 #
@@ -27,7 +27,7 @@
 #      0.1 18/04/2021: This version takes into account the possibility of look ahead bias, by loading separetely
 #      the required file with the new signal
 #			
-#			
+#	   0.2 07/05/2021: Moves the backtest for a thursday rebalance
 #--------------------p=E[mx]------------------------------
 
 
@@ -61,12 +61,16 @@ include("PortfolioManagement.jl")
 include("Tools.jl")
 
 # Hold for the new version
+   
 
 
-function generate_backtest(min_date, max_date)
+function generate_backtest(min_date, max_date, time_span; frequency="w")
 
-    
-    time_span=min_date:Day(1):max_date # Iterator of dates
+    #If we have a weekly frequency we need the same day in the time_span
+    daysw=[dayofweek(t) for t in time_span]
+    if frequency=="w"
+        @assert std(daysw)==0.0
+    end
     n=size(time_span)[1]
     p = Progress(n)
 
@@ -110,6 +114,13 @@ function generate_backtest(min_date, max_date)
     info["best_date"]       = min_date
     info["worst_return"]    = 0.0
     info["worst_date"]      = min_date
+
+    #For weekly frequencies we update the benchmark as well 
+
+    if frequency=="w"
+        benchmark[!, "retL5"] .=0.0
+        benchmark[6:end, "retL5"]=benchmark.adjclose[6:end]./benchmark.adjclose[1:end-5] .-1
+    end
 
     # # Data from SIC codes
     # sics=CSV.read(SICFILE[], DataFrame)
@@ -269,14 +280,29 @@ function generate_backtest(min_date, max_date)
         df_portfolio=DataFrame(ticker=tickers, ω=weights)
 
         df_ret=information_sets[year(t)-miny+1]
-        df_ret=@from i in df_ret begin
-            @where i.t_day == t
-            @select {i.ticker, i.ret}
-            @collect DataFrame   
+
+        if frequency=="w"
+            df_ret=@from i in df_ret begin
+                @where i.t_day == t
+                @select {i.ticker, i.retL5, i.ret}
+                @collect DataFrame   
+            end
+            #df_ret.ret=df_ret.retL5
+        else
+            df_ret=@from i in df_ret begin
+                @where i.t_day == t
+                @select {i.ticker, i.ret}
+                @collect DataFrame   
+            end
         end
 
         #Merge the returns
         df=leftjoin(df_portfolio, df_ret, on=:ticker)
+
+        if frequency=="w"
+            df.ret=df.retL5
+
+        end
         if size(df)[1]>0
 
             push!(nlongs, sum(df.ω .> 0.0 ))
@@ -320,9 +346,13 @@ function generate_backtest(min_date, max_date)
             end
 
             sdf=benchmark[benchmark.t_day .==t, :]
+
+            if frequency=="w"
+                benchmark.ret=benchmark.retL5
+            end
             sp500_ret=0.0
             if size(sdf)[1]>0
-            sp500_ret=sdf[!, "^GSPC_ret"][1]
+            sp500_ret=sdf[!, "ret"][1]
             end
 
             if size(cum_ret)[1]>0

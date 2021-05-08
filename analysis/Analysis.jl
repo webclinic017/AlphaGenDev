@@ -37,6 +37,9 @@ Random.seed!(123)
 # ret_portfolio=rand(d, size(time)[1])
 # ret_benchmark=rand(d, size(time)[1])
 
+quarterAnalysis(time3, ret_portfolio3, ret_benchmark)
+ret_portfolio=ret_portfolio3
+time=time3
 
 function quarterAnalysis(time, ret_portfolio, ret_benchmark)
     # Time must be sorted
@@ -60,7 +63,7 @@ function quarterAnalysis(time, ret_portfolio, ret_benchmark)
 
     plot()
     bar!(quarters, rel_performance,  xrotation=45, label="", legend=:topleft)
-
+    plot!(display=true)
     # Indicators - 
     # Fraction of quarters in which we beat the index
     fr = round(100*sum(rel_performance .> 0.0)/size(rel_performance)[1], digits=2)
