@@ -50,6 +50,7 @@ using Gurobi
 using FixedEffectModels
 using LaTeXStrings
 using StatFiles
+using GLM
 
 PATH_TO_SEC_DATA=ENV["PATH_TO_SEC_DATA"]
 
@@ -64,7 +65,7 @@ include("Tools.jl")
    
 
 
-function generate_backtest(min_date, max_date, time_span; frequency="w")
+function generate_backtest(min_date, max_date, time_span; frequency="w", verbose=false, type_signal="xb", nl=25, ns=25, pliquid=95, minprice=1.0, DD_tile=5)
 
     #If we have a weekly frequency we need the same day in the time_span
     daysw=[dayofweek(t) for t in time_span]
@@ -88,6 +89,7 @@ function generate_backtest(min_date, max_date, time_span; frequency="w")
     #Information on the benchmark
     benchmark=CSV.read("$(PATH_TO_SEC_DATA)\\yahoo_finance\\data_etfs\\^GSPC.csv", DataFrame)
     ret_portfolio=[]
+    ret_benchmark=[]
     tickers=[]
     weights=[]
     y_var=[]
@@ -117,15 +119,16 @@ function generate_backtest(min_date, max_date, time_span; frequency="w")
 
     #For weekly frequencies we update the benchmark as well 
 
-    if frequency=="w"
-        benchmark[!, "retL5"] .=0.0
-        benchmark[6:end, "retL5"]=benchmark.adjclose[6:end]./benchmark.adjclose[1:end-5] .-1
-    end
+    last_benchmark=0.0
 
     # # Data from SIC codes
     # sics=CSV.read(SICFILE[], DataFrame)
+    problematic=[]
+
+    df_bought=DataFrame()
     for t in time_span
-        if size(cum_ret)[1]>0
+        #println("$t - $(dayofweek(t))")
+        if verbose & size(cum_ret)[1]>0
         ProgressMeter.next!(p; showvalues = [(:Date,t), 
                                              (:Cumulative_Return,      cum_ret[end]),
                                              (:Cumulative_Benchmark,   cum_benchmark[end]),
@@ -170,7 +173,18 @@ function generate_backtest(min_date, max_date, time_span; frequency="w")
         #println(t)
         @assert t>maxt # Makse sure we add the one before and not after
         #We keep the last month of observations to compue a measure of liquidity
+        df2=@from i in df begin
+            @where (maxt-Month(3)<=i.t_day<=maxt) & !isnan(i.volume) & !isnan(i.adjclose) &!isnan(i.ret)
+            @select {i.ticker,i.t_day, i.open, i.adjclose, i.volume, i.ret, i.cshoq, i.sic, i.beta}
+            @collect DataFrame        
+        end
         
+        sort!(df2, [order(:ticker), order(:t_day)])
+        gdf=groupby(df2, [:ticker])
+        df_combined2=combine(gdf, :adjclose => minimum, :adjclose => maximum, :adjclose => last)
+        df_combined2[!, "DD"]=df_combined2.adjclose_last ./df_combined2.adjclose_maximum .- 1.0
+        df_combined2 = df_combined2[: , ["ticker", "DD"]]
+
         df=@from i in df begin
             @where (maxt-Day(15)<=i.t_day<=maxt) & !isnan(i.volume) & !isnan(i.adjclose) &!isnan(i.ret)
             @select {i.ticker,i.t_day, i.open, i.adjclose, i.volume, i.ret, i.cshoq, i.sic, i.beta}
@@ -183,7 +197,8 @@ function generate_backtest(min_date, max_date, time_span; frequency="w")
         df.illiq = abs.(df.ret)./(df.adjclose .* df.volume)
         df.me=df.adjclose .* df.cshoq
         gdf=groupby(df, [:ticker])
-        df_combined=combine(gdf, :illiq => mean, :volume => minimum, :me => last, :beta => last, :sic => last)
+        df_combined=combine(gdf, :illiq => mean, :volume => minimum, :me => last, :beta => last, :sic => last, :adjclose => last, :volume=> last,
+                                :adjclose => minimum)
 
         # Merge with the signal data before removing highly illiquid stocks
         # this is because some of them have been filtered already by only estimating the model
@@ -201,15 +216,51 @@ function generate_backtest(min_date, max_date, time_span; frequency="w")
         signal=signal[!, [:ticker, :Fret, :Eret, :fe, :sd_resid]]
 
         df=innerjoin(signal, df_combined, on = :ticker)
+        df=innerjoin(df, df_combined2, on = :ticker)
         sort!(df, [order(:ticker)])
+
+        
+        ret_pre_trade=0
+        if (size(df_bought)[1]>0) & (size(df)[1] > 0)
+            prices_before_open=[]
+            for tick in df_bought.ticker
+                try
+                
+                push!(prices_before_open, df.adjclose_last[df.ticker .== tick][1])
+                catch e
+                    # These stocks might not be found one day after rebalancing
+                    push!(prices_before_open, df_bought.price[df_bought.ticker .== tick][1])
+                    push!(problematic, "$tick - $t")
+                end
+            end
+
+            for i=1:size(df_bought)[1]
+                R=prices_before_open[i] / df_bought.price[i]
+                if !ismissing(R)
+                ret_pre_trade += (df_bought.ω[i]/100)*(R- 1)
+                else
+                ret_pre_trade += 0.0
+                end
+            end
+            
+         
+           
+        end
+
         #.* (!).(isnan.(df.illiq_mean))
         df=df[completecases(df) , :]
+        df=df[df.DD .>= percentile(df.DD, DD_tile), :] #! Avoids the retail frenzy
         #df=df[df.sd_resid .> 0.0, :]
         # Make sure we also have info on σ\_ϵ   
         #println(t)
         df=df[(!).(isnan.(df.illiq_mean)) .* (!).(isnan.(df.me_last)) , :]
         #df=df[df.me_last .<= percentile(df.me_last, 90), :]
-        df=df[df.illiq_mean .<= percentile(df.illiq_mean, 95), :] #!!!!!!!!!! 
+        df=df[df.illiq_mean .<= percentile(df.illiq_mean, pliquid), :] #!!!!!!!!!! 
+        df=df[df.ticker .!= "nspr", :]
+        # Let's put the restriction to pennys tocks in the universe
+        df=df[(!).(ismissing.(df.adjclose_last)), :]
+        df=df[df.adjclose_last .>= minprice , :] #!!!!!!!!!! 
+        df=df[df.volume_last .> 0 , :]
         #df=df[df.sd_resid .<= percentile(df.sd_resid, 90), :]
         #df=df[df.illiq_mean .<= percentile(df.illiq_mean, 50), :]
         #!df=df[df.volume_minimum .> 0.0, :] # We also drop stocks with very low dollar volume
@@ -217,65 +268,46 @@ function generate_backtest(min_date, max_date, time_span; frequency="w")
         # Now we need one digit sic codes
         
         # Returns on time t #! I should check expost if trades are done when volume is 0
-      
+
+        # If the frequency is weekly, then before I rebalance I need to compute what has been the return of the portfolio
+
+        
 
         if dayofweek(t)==4
+
+            #Market predictability, can I say anything about the market?
+         
+           
             
-            α=df.Eret #!
+           
+
+            
+            if type_signal=="xb"
+            α=df.Eret 
+            elseif type_signal=="xb+fe"
+            α=df.Fret
+            end
             σ=df.sd_resid
             df.one_sic=convert.(Int64, floor.(df.sic_last ./ 1000))
             β=df.beta_last
             S=cate_to_mat(df.one_sic)
+            nLong=nl
+            nShort=ns
             #S=[]
-            #ω_value, y_value, yp_value, yn_value= optimizationSquarePoint(α , σ, env, only_long=true)
-            #ω_value, y_value, yp_value, yn_value= simpleLongShort(α , σ)
-            #**************************************************************************************
-            ub=1/10
-            lb=-1/10
-            
-            use_sector_exposure=false
-            βₘ=0.0
-            
-            N=size(α)[1]
-            u_up=ones(N,1)*ub
-            u_down= ones(N,1)*lb
-            use_signal=1
-            GRB_ENV=env
-            free_longshort=false
-            βn=[]
-            #println(t)
-
-            L=2.0
-            nLong=25
-            nShort=25
-            # end
-            ω_value, ωc_value, ω_long_value, ω_short_value = rebalance_optimization(α ,    #! 
-                                                                                    β, 
-                                                                                    βn,
-                                                                                    u_up, 
-                                                                                    u_down, 
-                                                                                    L,
-                                                                                    S,
-                                                                                    GRB_ENV=GRB_ENV,
-                                                                                    use_sector_exposure=use_sector_exposure, 
-                                                                                    βₘ=βₘ, 
-                                                                                    βnasdaq=-99,
-                                                                                    nlong=nLong,
-                                                                                    nshort=nShort,
-                                                                                    free_longshort=free_longshort)
-            
-            ω_value .= ω_value .* 100 
-            y_value = ω_value .!= 0.0
-            #**************************************************************************************
-          
-            y_value=convert.(Bool, y_value)
-            tickers=df.ticker[y_value]
-            weights=ω_value[y_value]
+            ω_value, y_value, yp_value, yn_value= optimizationSquarePoint(α , σ, S, β, nLong, nShort, env)
+           
+            tickers=df.ticker[y_value .≈ 1]
+            prices=df.adjclose_last[y_value .≈ 1 ]
+            weights=ω_value[y_value .≈ 1]
             y_var=y_value
-            
+
+            @assert (sum(y_value) ≈ 50 ) 
+            @assert (size(tickers)[1]≈ 50)
+
+            df_bought=DataFrame(ω=weights, ticker=tickers, price=prices)
+
         end
         
-       
 
         df_portfolio=DataFrame(ticker=tickers, ω=weights)
 
@@ -284,27 +316,29 @@ function generate_backtest(min_date, max_date, time_span; frequency="w")
         if frequency=="w"
             df_ret=@from i in df_ret begin
                 @where i.t_day == t
-                @select {i.ticker, i.retL5, i.ret}
+                @select {i.ticker, i.retL5, i.ret, i.adjclose}
                 @collect DataFrame   
             end
             #df_ret.ret=df_ret.retL5
         else
             df_ret=@from i in df_ret begin
                 @where i.t_day == t
-                @select {i.ticker, i.ret}
+                @select {i.ticker, i.ret, i.adjclose}
                 @collect DataFrame   
             end
         end
 
         #Merge the returns
         df=leftjoin(df_portfolio, df_ret, on=:ticker)
-
-        if frequency=="w"
-            df.ret=df.retL5
-
-        end
-        if size(df)[1]>0
-
+        
+     
+        if (size(df_ret)[1]>0) & (size(df_portfolio)[1] > 0)
+            if size(df_bought)[1] >0
+                df=leftjoin(df, df_bought, on=:ticker, makeunique=true)
+                df[!,"ret_last"]=df.adjclose ./ df.price .-1
+            end
+            
+           
             push!(nlongs, sum(df.ω .> 0.0 ))
             push!(nshorts, sum(df.ω .< 0.0 ))
             df.ret[ismissing.(df.ret)] .= 0.0
@@ -312,7 +346,7 @@ function generate_backtest(min_date, max_date, time_span; frequency="w")
             # Updates winners and lossers to display
 
             # Winner is the stock with the largest gain so far
-            gains=[df.ω[i] > 0.0 ? df.ret[i] : -df.ret[i] for i=1:size(df)[1]]
+            gains  =[df.ω[i] > 0.0 ? df.ret[i] : -df.ret[i] for i=1:size(df)[1]]
             
             i_w=argmax(gains)
             i_l=argmin(gains)
@@ -331,14 +365,15 @@ function generate_backtest(min_date, max_date, time_span; frequency="w")
             info["loser_position"]=round(df.ω[i_l], digits=2)
             end
 
-            port_ret=sum(df.ret[i]*df.ω[i]/100 for i=1:size(df)[1])
-
+            port_ret=(1+sum(df.ret[i]*df.ω[i]/100 for i=1:size(df)[1]))*(1+ret_pre_trade)-1
+            
             push!(ret_portfolio, port_ret)
-
+            
             if port_ret*100 > info["best_return"]
                 info["best_return"] = round(port_ret*100, digits=2)
                 info["best_date"]   = t
             end
+         
 
             if port_ret*100 < info["worst_return"]
                 info["worst_return"] = round(port_ret*100, digits=2)
@@ -347,23 +382,35 @@ function generate_backtest(min_date, max_date, time_span; frequency="w")
 
             sdf=benchmark[benchmark.t_day .==t, :]
 
-            if frequency=="w"
-                benchmark.ret=benchmark.retL5
-            end
+         
             sp500_ret=0.0
-            if size(sdf)[1]>0
-            sp500_ret=sdf[!, "ret"][1]
+            if (size(sdf)[1]>0) & (last_benchmark != 0.0)
+                sp500_ret=sdf.adjclose[1]/last_benchmark[1] - 1.0
+                last_benchmark=sdf.adjclose[1]
+            else
+                last_benchmark=sdf.adjclose[1]
             end
 
             if size(cum_ret)[1]>0
                 push!(cum_ret, cum_ret[end]*(1+port_ret))
                 push!(cum_benchmark, cum_benchmark[end]*(1+sp500_ret))
+                
             else
                 push!(cum_ret, (1+port_ret))
                 push!(cum_benchmark, 1+sp500_ret)
             end
 
+            push!(ret_benchmark, sp500_ret)
+
             push!(time, t)
+            try
+            df_bought=DataFrame(ω=df.ω, ticker=df.ticker, price=df.adjclose)
+            catch e
+                println(df.ω)
+                println(df.adjclose)
+                println(e)
+                bla
+            end
         end
 
         push!(TICKERS, tickers)
@@ -371,7 +418,7 @@ function generate_backtest(min_date, max_date, time_span; frequency="w")
 
     end
 
-return time, ret_portfolio, cum_ret, cum_benchmark, TICKERS, WEIGHTS, nlongs, nshorts
+return time, ret_portfolio, cum_ret, cum_benchmark, TICKERS, WEIGHTS, nlongs, nshorts, ret_benchmark, problematic
 
 # plot()
 # plot!(time, cum_ret)

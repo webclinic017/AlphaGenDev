@@ -1,11 +1,12 @@
 include("signal/Backtest.jl")
 using Dates, Plots
 min_date=Dates.Date(2010,1,1)
-max_date=Dates.Date(2021,4,15)
+max_date=Dates.Date(2010,1,15)
 time_span=min_date:Day(1):max_date # Iterator of dates
 #time_span=[t for t in time_span if dayofweek(t)==4]
 
-@time time, ret_portfolio, cum_ret, cum_benchmark, TICKERS, WEIGHTS, nlongs, nshorts= generate_backtest(min_date, max_date, time_span, frequency="d");
+@time time, ret_portfolio, cum_ret, cum_benchmark, TICKERS, WEIGHTS, nlongs, nshorts, ret_benchmark= generate_backtest(min_date, max_date, 
+time_span, frequency="d");
 
 # Winsorize the upper tail of the distribution of returns
 # so that extreme events "pure luck" do not mess our results

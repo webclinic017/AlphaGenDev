@@ -24,6 +24,8 @@
 # Log -  11/04/2021 Tries a parallel solution
 #
 #       07/05/2021 Weekly return directly in the construction e.g. 5 trading days before
+#
+#       11/05/2021 Optional parameter to download again all yahoo finance files
 # 	
 #--------------------p=E[mx]------------------------------
 
@@ -42,7 +44,7 @@ from multiprocessing import Process, Queue
 
 #%%
 
-def get_yahoo_finance_data(t):
+def get_yahoo_finance_data(t, update_all=False):
     PATH_TO_SEC_DATA=os.environ['PATH_TO_SEC_DATA']
     PATH_TO_COMPUSTAT_CRSP_DATA=os.environ['PATH_TO_COMPUSTAT_CRSP_DATA']
     t=tqdm(t)
@@ -56,7 +58,7 @@ def get_yahoo_finance_data(t):
     for ticker in t:
         url=f"https://query1.finance.yahoo.com/v7/finance/download/{ticker}?period1={before}&period2={today}&interval=1d&events=history&includeAdjustedClose=true"
         try:
-            if not os.path.exists(os.path.join(PATH_TO_SEC_DATA, "yahoo_finance", "data", f"{ticker}.csv")):
+            if update_all or (not os.path.exists(os.path.join(PATH_TO_SEC_DATA, "yahoo_finance", "data", f"{ticker}.csv"))):
                 time.sleep(1)
                 t.set_description(f"Downloading {ticker} - {not_found}  not found ")
                 t.refresh() # to show immediately the update
@@ -65,10 +67,10 @@ def get_yahoo_finance_data(t):
                 temp_df['ret']=[np.nan for i in temp_df['Adj Close']]
                 try:
                     temp_df.loc[1:, ('ret')]=temp_df['Adj Close'][1:].values/temp_df['Adj Close'][:-1].values-1.0
-                    temp_df.loc[5:, ('retL5')]=temp_df['Adj Close'][5:].values/temp_df['Adj Close'][:-5].values-1.0
+                    #temp_df.loc[5:, ('retL5')]=temp_df['Adj Close'][5:].values/temp_df['Adj Close'][:-5].values-1.0
                 except:
                     temp_df.loc[1:, ('ret')]=np.nan
-                    temp_df.loc[5:, ('retL5')]=np.nan
+                    #temp_df.loc[5:, ('retL5')]=np.nan
 
                 temp_df['year']=[datetime.datetime.strptime(date, '%Y-%m-%d').year for date in temp_df.Date]
                 temp_df['month']=[datetime.datetime.strptime(date, '%Y-%m-%d').month for date in temp_df.Date]
@@ -113,8 +115,11 @@ if __name__=='__main__':
 
     tickers=df.ticker #[1:10]
 
+    # For etfs
+    #tickers=["XLB", "XLI", "XLY", "XLP", "XLE", "XLF", "XLU", "XLV", "XLK"]
+
     print(len(tickers))
-    get_yahoo_finance_data(tickers)
+    get_yahoo_finance_data(tickers, update_all=True)
     #nb= 1 #os.cpu_count() The API breaks if we try more
     # batches=np.array_split(tickers,nb)
     # print(f"Batches of size {[len(batch) for batch in batches]}")
@@ -135,10 +140,4 @@ if __name__=='__main__':
     # print(f"{t} seconds - for {n} tickers")
 
 
-# #%% testing
-# ticker='tsla'
-# before = int(time.mktime(datetime.date(1990,1,1).timetuple()))# Some starting date so I dont download all
-# today=int(time.time())
-# url=f"https://query1.finance.yahoo.com/v7/finance/download/{ticker}?period1={before}&period2={today}&interval=1d&events=history&includeAdjustedClose=true"
-     
-# %%
+

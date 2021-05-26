@@ -13,14 +13,19 @@ closing prices up to April 23 -2020
 Change, When computing the signal of a thursday i cannot just do t-1 because it might happen that that friday was  aholiday, e.g. July 4 2001
 the predict if t_day=t-1 needs to be replaced with the last available info, e.g. sum t_day if t_day<t use r(max)
 
+Log: 
+	The filter of 5 USD might cause some problems in some occassions, so I moved the filter to 1 USD 08/05/2021
+	
+	Instead of filtering we put the conditional in the regression, and then predict everything, that way those with less than 5 could have a signal but the parameters wont be affected
+
 */
 
 
 
 
 // Loops over all dates
-local start = mdy(1,1,2000)
-local end   = mdy(4,15,2021)
+local start = mdy(1,1,2010)
+local end   = mdy(5,20,2021)
 forv t=`start'/`end'{
 	if dow(`t')==4{
 	qui{
@@ -60,7 +65,7 @@ forv t=`start'/`end'{
 	sort cik t_day // Creates the forward looking return
 	by cik: gen Fexret=adjclose[_n+21]/adjclose[_n]-1
 
-	drop if adjclose<=5
+	//drop if adjclose < 1
 	// We need complete cases of firm characteristics
 	foreach var in Fexret me bm prof cash avg_beta mret7 mret21 mret180{
 	di "`var'"
@@ -76,7 +81,7 @@ forv t=`start'/`end'{
 	else{
 		local variables me bm prof cash avg_beta mret7 mret21 mret180
 	}
-	xtreg Fexret `variables', fe
+	xtreg Fexret `variables' if adjclose >=5, fe
 	
 	foreach var in `variables'{
 		gen _b_`var'=_b[`var']	
@@ -84,7 +89,7 @@ forv t=`start'/`end'{
 	gen r2=e(r2)
 	
 	sum t_day if t_day < `t'
-	local last_day=`r(max)'
+	local last_day =`r(max)'
 	
 	predict Eret if t_day== `last_day', xb
 	predict fe, u
@@ -101,12 +106,21 @@ forv t=`start'/`end'{
 	replace t_day =`t'
 	sort cik
 
-	keep cik t_day ticker Fret Eret fe _b_* r2 sd_resid
+	//keep cik t_day ticker Fret Eret fe _b_* r2 sd_resid
 
 	local yy=year(`t')
 	local mm=month(`t')
 	local dd=day(`t')
 	save "`PATH_TO_SEC_DATA'\signals\v1\signal`yy'-`mm'-`dd'.dta", replace
+	
+	sort me
+	keep if _n >_N-500
+	egen mcap=sum(me)
+	gen walpha=(me/mcap)*Fret
+	egen Fret_sp500=sum(walpha)
+	keep t_day Fret_sp500
+	keep if _n==1
+	save "`PATH_TO_SEC_DATA'\signals\v1\sp500`yy'-`mm'-`dd'.dta", replace
 
 		}
 	}

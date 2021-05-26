@@ -157,7 +157,7 @@ function simpleLong(α, σ)
 end
 
 
-function optimizationSquarePoint(α, σ, GRB_ENV; γ=5.0, only_long=false)
+function optimizationSquarePoint(α, σ, S, β, nl, ns, GRB_ENV; γ=5.0, only_long=false)
 
     model=JuMP.Model(with_optimizer(() -> Gurobi.Optimizer(GRB_ENV)))
     set_silent(model) 
@@ -174,7 +174,7 @@ function optimizationSquarePoint(α, σ, GRB_ENV; γ=5.0, only_long=false)
     #Redefinition ω=ω+ - ω-
     for i=1:N
         @constraint(model, ω[i]==ω_long[i]-ω_short[i])
-        @constraint(model, -4<=ω[i]<=4)
+        @constraint(model, -2<=ω[i]<=2)
     end
 
     @constraint(model, sum(ω_long[i]+ω_short[i] for i=1:N)==100.0)
@@ -197,7 +197,15 @@ function optimizationSquarePoint(α, σ, GRB_ENV; γ=5.0, only_long=false)
         for i=1:N
             @constraint(model, yn[i]==0.0)
         end
-  
+    else
+        @constraint(model, sum(yp[i] for i=1:N)==nl)
+        @constraint(model, sum(yn[i] for i=1:N)==ns)
+    end
+
+    K=size(S)[2]
+
+    for k in 1:K
+        @constraint(model, sum((yp[i]+yn[i])*S[i,k] for i=1:N)<=sum((yp[i]+yn[i]) for i=1:N)*0.15)
     end
 
     @constraint(model, sum(y[i] for i=1:N)==50.0)
@@ -231,7 +239,7 @@ function optimizationRevolut(α, GRB_ENV=Gurobi.Env())
     return value.(y)
 end
 
-function rebalance_optimization(α, β, βn, u_up, u_down, L, S; min_position=0.00, nlong=25, nshort=25,
+function rebalance_optimization(α, β, βn, u_up, u_down, L, S; min_position=0.03, nlong=25, nshort=25,
                                  use_sector_exposure=false, sector_exposure=0.15, βₘ=0.0, GRB_ENV=[], βnasdaq=0.0, free_longshort=false)
 
     #Creates the JuMP model with the Solver 
@@ -262,6 +270,8 @@ function rebalance_optimization(α, β, βn, u_up, u_down, L, S; min_position=0.
     # Create some binary variables to see if we have a company either long or short
     @variable(model, yp[1:N], Bin)
     @variable(model, yn[1:N], Bin)
+    @variable(model, y[1:N], Bin)
+
     # So, if ω is different than zero the binary variable activates
 
     # M*ω >= y 
@@ -270,6 +280,7 @@ function rebalance_optimization(α, β, βn, u_up, u_down, L, S; min_position=0.
     # If ω>0 y has to be 1, if ω=0 y has to be zerp
     M=20000000.0
     for i in 1:N
+        @constraint(model, y[i]==yp[i]+yn[i])
         @constraint(model, M*ω_long[i]>=yp[i])
         @constraint(model, ω_long[i]<=M*yp[i])
         @constraint(model, M*ω_short[i]>=yn[i])
@@ -329,6 +340,8 @@ function rebalance_optimization(α, β, βn, u_up, u_down, L, S; min_position=0.
     ω_long_value=ω_long_value/sum(abs.(ω_value))
     ω_short_value=ω_short_value/sum(abs.(ω_value))
 
-    return ω_value, ωc_value, ω_long_value, ω_short_value
+    y_value=value.(y)
+
+    return ω_value, ωc_value, ω_long_value, ω_short_value, y_value
 
  end

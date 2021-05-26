@@ -30,16 +30,9 @@ using Random
 using Plots
 using LaTeXStrings
 using ProgressMeter
-Random.seed!(123)
 
-# d=Normal(0.01, 0.05)
-# time=Date(2010,1,1):Day(1):Date(2021,4,15)
-# ret_portfolio=rand(d, size(time)[1])
-# ret_benchmark=rand(d, size(time)[1])
-
-quarterAnalysis(time3, ret_portfolio3, ret_benchmark)
-ret_portfolio=ret_portfolio3
-time=time3
+quarterAnalysis(time5, ret_portfolio5, ret_benchmark5)
+holdingHorizons(time5, ret_portfolio5, ret_benchmark5)
 
 function quarterAnalysis(time, ret_portfolio, ret_benchmark)
     # Time must be sorted
@@ -94,7 +87,7 @@ function quarterAnalysis(time, ret_portfolio, ret_benchmark)
 
     @info("Longest bad streak of  $longest_subsequence quarters between $(quarters[ii]) and $(quarters[jj])")
    
-
+    plot!(show=true)
 
 end
 
@@ -111,7 +104,7 @@ function holdingHorizons(time, ret_portfolio, ret_benchmark)
 
     marketVolatility=[]
     returnVolatility=[]
-    @showprogress for h in 0:365*2 #(size(returns)[1]-1)
+    @showprogress for h in 0:52*2 #(size(returns)[1]-1)
        
         # We compute the cumulative return
         cum_ret      = [prod(1+ret_portfolio[i]   for i=j:(j+h)) for j=1:(size(ret_portfolio)[1]-h)]
@@ -134,8 +127,8 @@ function holdingHorizons(time, ret_portfolio, ret_benchmark)
     plot!(horizon, beats, label="Positive return")
     xlabel!("Holding horizon")
     ylabel!(" % of time")
-    vline!([7, 30, 30*6, 365], label="")
-    plot!(xticks=([7, 30, 30*6, 365], ["1w", "1m", "6m", "1y"]))
+    vline!([1, 4, 52], label="")
+    plot!(xticks=([1, 4, 52], ["1w", "1m", "1y"]))
     plot!(xrotation=90 )
     # savefig("$(f)horizons$ns")
 

@@ -233,6 +233,8 @@ def aggregate_yf_csv():
 
 if __name__=='__main__':
     start=time.time()
+    #append_yahoo_finance()
+    aggregate_yf_csv()
     merge_yf_sec()
     end=time.time()
     time_ellapsed=end-start
