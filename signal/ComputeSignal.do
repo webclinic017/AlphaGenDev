@@ -25,12 +25,12 @@ Log:
 
 // Loops over all dates
 local start = mdy(1,1,2010)
-local end   = mdy(5,20,2021)
-forv t=`start'/`end'{
+local end   = mdy(6,3,2021)
+forv t=`end'/`end'{
 	if dow(`t')==4{
 	qui{
 	local PATH_TO_SEC_DATA: env PATH_TO_SEC_DATA
-	//local t = mdy(4, 15, 2021)
+	//local t = mdy(5, 27, 2021)
 	di %td `t'
 
 	local y = year(`t') 

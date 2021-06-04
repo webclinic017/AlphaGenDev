@@ -74,6 +74,7 @@ def append_yahoo_finance(tickers, id):
 #%%
 def merge_yf_sec():
 # We start with the pricing data and then add the accouting data
+    print("Reading Data")
     df_yahoo=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, 'yahoo_finance', 'aggregated_yf.csv'))
 
     df_sec=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "fundamentals.csv"))
@@ -105,6 +106,8 @@ def merge_yf_sec():
     before = int(time.mktime(date(1990,1,1).timetuple()))# Some starting date so I dont download all
     today=int(time.time())
 
+    print("Downloading ETF Data")
+
     for ticker in etfs:
         url=f"https://query1.finance.yahoo.com/v7/finance/download/{ticker}?period1={before}&period2={today}&interval=1d&events=history&includeAdjustedClose=true"
     
@@ -122,6 +125,8 @@ def merge_yf_sec():
     # use asreg from stata for the beta
     df=df.sort_values(['cik', 't_day'])
     temp=df[df.cik==320193]
+
+    print("Computing Betas")
     covariances=df.groupby(['cik'])[['ret', '^GSPC_ret']].rolling(252, min_periods=0).cov().unstack(2)
     
     icov=covariances['^GSPC_ret'].reset_index()
@@ -183,6 +188,7 @@ def merge_yf_sec():
     """
    
     etfs=["^GSPC", "SPY"]
+    print("Adding SPY as a ticker")
 
     before = int(time.mktime(date(1990,1,1).timetuple()))# Some starting date so I dont download all
     today=int(time.time())

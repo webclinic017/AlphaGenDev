@@ -32,10 +32,12 @@ forv t=`start'/`end'{
 	drop if gics==""
 	by gics: egen mcap=sum(me)
 	gen walpha=(me/mcap)*Fret
+	gen walpha2=(me/mcap)*Eret
 	by gics: egen Fret_=sum(walpha)
-	keep t_day Fret_ gics
+	by gics: egen Eret_=sum(walpha2)
+	keep t_day Fret_ Eret_ gics
 	by gics: keep if _n==1
-	reshape wide Fret_, i(t_day) j(gics) string
+	reshape wide Fret_ Eret_, i(t_day) j(gics) string
 	save "`PATH_TO_SEC_DATA'\signals\v1\etfs`yy'-`mm'-`dd'.dta", replace
 	
 	}

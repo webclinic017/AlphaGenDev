@@ -27,7 +27,7 @@ PATH_TO_SEC_DATA=ENV["PATH_TO_SEC_DATA"]
 
 include("PortfolioManagement.jl")
 include("Tools.jl")
-t=Date(2021, 5, 20)
+t=Date(2021, 6, 3)
 y=year(t)
 information_set=CSV.read("$(PATH_TO_SEC_DATA)\\information_set$y.csv", DataFrame)
 information_set2=CSV.read("$(PATH_TO_SEC_DATA)\\information_set$(y-1).csv", DataFrame)
@@ -143,8 +143,8 @@ end
 df.one_sic=convert.(Int64, floor.(df.sic_last ./ 1000))
 β=df.beta_last
 S=cate_to_mat(df.one_sic)
-nLong=25
-nShort=25
+nLong=50
+nShort=0
 #S=[]
 env=Gurobi.Env()
 ω_value, y_value, yp_value, yn_value= optimizationSquarePoint(α , σ, S, β, nLong, nShort, env)

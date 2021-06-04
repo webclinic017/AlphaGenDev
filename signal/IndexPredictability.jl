@@ -128,10 +128,12 @@ end
     end
 
     if size(Frets)[1] > 0
-        if Fret >= 0.0 #percentile(Frets, 10)
+        if Fret >= 0.01 #percentile(Frets, 10)
             push!(ret_strategy, sp500.ret[1])
-        else
+        elseif Fret <= -0.01
             push!(ret_strategy, - sp500.ret[1])
+        else
+            push!(ret_strategy, 0.0)
         end
     else
         push!(ret_strategy, sp500.ret[1])
@@ -146,11 +148,13 @@ end
 
     for i=1:size(etfs)[1]
         temp=ret_industries_strategy[etfs[i]]
-
-        if Fret_ind[i]>=0.0
+        #!TODO conviction, use another threshold
+        if Fret_ind[i]>=0.01
             push!(temp, ret_industries[etfs[i]][end])
-        else
+        elseif Fret_ind[i]<=-0.01
             push!(temp, -ret_industries[etfs[i]][end])
+        else
+            push!(temp, 0.0)
         end
         ret_industries_strategy[etfs[i]]=temp
 
@@ -196,7 +200,7 @@ cum_industries_strategies=[[prod(1+ret_industries_strategy[e][i]  for i=1:j) for
 cum_industries=[[prod(1+ret_industries[e][i]  for i=1:j) for j=1:size(ret_industries[e])[1]] for e in etfs]
 
 
-i=9
+i=5
 plot()
 plot!(time, cum_industries_strategies[i], label= "$(names_industry[etfs[i]]) Strategy")
 plot!(time, cum_industries[i], label= "$(names_industry[etfs[i]]) $(etfs[i]) ETF")
@@ -207,17 +211,17 @@ plot!(time, cum_strategy, label="Index Strategy")
 plot!(time, cum_benchmark, label="SP500")
 plot!(legend= :topleft)
 
-# # #Of times that we manage to predict the sign
-sign_acc=round(100*sum( sign.(Frets) .== sign.(RFrets))/size(Frets)[1], digits=2)
-@info("Sign accuracy $sign_acc %")
+# # # #Of times that we manage to predict the sign
+# sign_acc=round(100*sum( sign.(Frets) .== sign.(RFrets))/size(Frets)[1], digits=2)
+# @info("Sign accuracy $sign_acc %")
 
 
 
-sign_accs=[round(100*sum( sign.(Fre_industries[e]) .== sign.(re_industries[e]))/size(Fre_industries[e])[1], digits=2) for e in etfs]
+# sign_accs=[round(100*sum( sign.(Fre_industries[e]) .== sign.(re_industries[e]))/size(Fre_industries[e])[1], digits=2) for e in etfs]
 
-for i=1:size(etfs)[1]
-    @info("Sign accuracy $(names_industry[etfs[i]]) => $(sign_accs[i]) %")
-end
+# for i=1:size(etfs)[1]
+#     @info("Sign accuracy $(names_industry[etfs[i]]) => $(sign_accs[i]) %")
+# end
 
 # plot()
 # plot!(time, Frets, label="Predicted")
