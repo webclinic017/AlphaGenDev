@@ -1,6 +1,6 @@
 include("signal/Backtest.jl")
 using Dates, Plots
-min_date=Dates.Date(2010,1,1)
+min_date=Dates.Date(2021,1,1)
 max_date=Dates.Date(2021,5,20)
 time_span=min_date:Day(1):max_date # Iterator of dates
 time_span=[t for t in time_span if dayofweek(t)==4]

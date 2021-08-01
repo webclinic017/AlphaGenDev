@@ -7,7 +7,7 @@ into a Stata readable format so that data can be loaded and unloaded faster
 
 local PATH_TO_SEC_DATA: env PATH_TO_SEC_DATA
 local max_y=real(substr("$S_DATE", -4, .))
-forv y=1990/`max_y'{
+forv y=`max_y'/`max_y'{
 di "`y'"
 	qui{
 		import delimited using "`PATH_TO_SEC_DATA'\information_set`y'.csv", clear

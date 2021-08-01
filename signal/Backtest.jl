@@ -77,7 +77,7 @@ function generate_backtest(min_date, max_date, time_span; frequency="w", verbose
 
     # Some first check, we need to have a signal available at least 7 days from the beginning of the backtest, otherwise we cannot really compare backtests
     signal_files=readdir("$(PATH_TO_SEC_DATA)\\signals\\v1")
-    signal_files=[Dates.Date(file[7:end-4]) for file in signal_files]
+    signal_files=[Dates.Date(file[7:end-4]) for file in signal_files if file[1:6]=="signal"]
 
     @assert minimum(time_span)>=minimum(signal_files)
 

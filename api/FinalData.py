@@ -236,8 +236,32 @@ def aggregate_yf_csv():
 
 
 #%%
-
 if __name__=='__main__':
+
+    start=time.time()
+    df=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "cik_ticker.csv"))
+    tickers=df.ticker
+    nb=os.cpu_count() 
+    batches=np.array_split(tickers,nb)
+    print(f"Batches of size {[len(batch) for batch in batches]}")
+
+    print(f"Spliting the sample into {len(batches)} batches")
+    processes = [Process(target=append_yahoo_finance, args=(batches[i], i)) for i in range(nb)]
+
+    for p in processes:
+        p.start()
+
+    for p in processes:
+        p.join()
+
+    end=time.time()
+    time_ellapsed=end-start
+    t=round(time_ellapsed, 2)
+    n=len(tickers)
+    print(f"{t} seconds - for {n} tickers")
+
+
+#if __name__=='__main__':
     start=time.time()
     #append_yahoo_finance()
     aggregate_yf_csv()
@@ -246,31 +270,3 @@ if __name__=='__main__':
     time_ellapsed=end-start
     t=round(time_ellapsed, 2)
     print(f"{t} seconds")
-    
-
-
-
-
-# if __name__=='__main__':
-
-#     start=time.time()
-#     df=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "cik_ticker.csv"))
-#     tickers=df.ticker
-#     nb=os.cpu_count() 
-#     batches=np.array_split(tickers,nb)
-#     print(f"Batches of size {[len(batch) for batch in batches]}")
-
-#     print(f"Spliting the sample into {len(batches)} batches")
-#     processes = [Process(target=append_yahoo_finance, args=(batches[i], i)) for i in [2]] #range(nb)]
-
-#     for p in processes:
-#         p.start()
-
-#     for p in processes:
-#         p.join()
-
-#     end=time.time()
-#     time_ellapsed=end-start
-#     t=round(time_ellapsed, 2)
-#     n=len(tickers)
-#     print(f"{t} seconds - for {n} tickers")
