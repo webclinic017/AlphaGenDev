@@ -25,7 +25,7 @@ Log:
 
 // Loops over all dates
 local start = mdy(1,1,2010)
-local end   = mdy(7,29,2021)
+local end   = mdy(9,2,2021)
 forv t=`end'/`end'{
 	if dow(`t')==4{
 	qui{

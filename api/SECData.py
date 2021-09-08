@@ -400,4 +400,6 @@ def append_compustat_sec():
 
 # %%
 if __name__=='__main__':
-    append_compustat_sec()
+    # update_all_data()
+    # append_compustat_sec()
+    aggregate_sec_data()
