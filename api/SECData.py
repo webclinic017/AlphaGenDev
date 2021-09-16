@@ -107,6 +107,11 @@ def get_sic_codes():
     return sics
 
 #%%
+
+
+
+
+#%%
 def prepare_sec(y,q):
     main_path=os.path.join(PATH_TO_SEC_DATA, f"sec{y}{q}")
     # If we dont have the folder we dont try to rpocess the data

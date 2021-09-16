@@ -27,7 +27,7 @@ PATH_TO_SEC_DATA=ENV["PATH_TO_SEC_DATA"]
 
 include("PortfolioManagement.jl")
 include("Tools.jl")
-t=Date(2021, 9, 2)
+t=Date(2021, 9, 9)
 y=year(t)
 information_set=CSV.read("$(PATH_TO_SEC_DATA)\\information_set$y.csv", DataFrame)
 information_set2=CSV.read("$(PATH_TO_SEC_DATA)\\information_set$(y-1).csv", DataFrame)
@@ -189,6 +189,7 @@ env=Gurobi.Env()
 
 tickers=df.ticker[y_value .≈ 1]
 sig=α[y_value .≈ 1]
+Fret = df.Fret[y_value .≈ 1]
 prices=df.adjclose_last[y_value .≈ 1 ]
 weights=ω_value[y_value .≈ 1]
 y_var=y_value
@@ -196,7 +197,7 @@ y_var=y_value
 @assert (sum(y_value) ≈ 50 ) 
 @assert (size(tickers)[1]≈ 50)
 
-df_bought=DataFrame(ω=weights, ticker=tickers, price=prices, sig=sig)
+df_bought=DataFrame(ω=weights, ticker=tickers, price=prices, sig=sig, Fret = Fret)
 
 # Get names by ticker
 ciks=CSV.read("$(PATH_TO_SEC_DATA)\\cik_ticker.csv", DataFrame)
@@ -207,7 +208,7 @@ inf=CSV.read("$(PATH_TO_SEC_DATA)\\sec20211\\sub.txt", DataFrame)
 inf=inf[!, [:cik, :name]]
 unique!(inf)
 df=leftjoin(df, inf, on = :cik)
-df=df[!, [:ω, :ticker, :name, :sig]]
+df=df[!, [:ω, :ticker, :name, :sig, :Fret]]
 CSV.write("$(PATH_TO_SEC_DATA)\\rebalance\\$t.csv", df)
 
 
