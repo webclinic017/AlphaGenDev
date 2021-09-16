@@ -28,9 +28,12 @@
 # be taken into account, as daily values might not be unique. Also we need to double ensure that the
 # reference to the account is the most recent and not a rectification of a value	
 # 
-# 
+#
 # 22/04/2021
 # SIC codes did not appear on the compustat database we used, so im adding them from the SEC files	
+#
+# 16/9/2021
+# It is time to add more variables to the dataset, I perform some analysis to construct more variables. 
 #--------------------p=E[mx]------------------------------
 
 #%%
@@ -45,6 +48,7 @@ import numpy as np
 import pickle
 import pathlib
 import matplotlib.pyplot as plt
+from collections import Counter
 #%%
 # Environmental Variables e.g. paths to files, api keys, credentials etc
 PATH_TO_SEC_DATA=os.environ['PATH_TO_SEC_DATA']
@@ -107,7 +111,7 @@ def get_sic_codes():
     return sics
 
 #%%
-def prepare_sec(y,q):
+def prepare_sec(y,q, subset = 0):
     main_path=os.path.join(PATH_TO_SEC_DATA, f"sec{y}{q}")
     # If we dont have the folder we dont try to rpocess the data
     if not os.path.exists(main_path):
@@ -124,7 +128,14 @@ def prepare_sec(y,q):
     num=num[(num.qtrs == 0) | (num.qtrs == 1) | (num.qtrs == 4)]
 
     # We focus on very specific accounts
-    accounts=["Assets","StockholdersEquity", "CommonStockSharesOutstanding", "OperatingIncomeLoss","CashAndCashEquivalentsAtCarryingValue"]
+    if subset == 0:
+        name_file = "aggregated.csv"
+        accounts=["Assets","StockholdersEquity", "CommonStockSharesOutstanding", "OperatingIncomeLoss","CashAndCashEquivalentsAtCarryingValue"]
+    else:
+        most_common = Counter(num['tag']).most_common(subset)
+        accounts = [mc[0] for mc in most_common]
+        name_file="aggregated_full.csv"
+    
     num=num[num.tag.isin(accounts)]
 
     # now we merge (inner join e.g. keep if _merge==3 in Stata) with sub
@@ -151,11 +162,16 @@ def prepare_sec(y,q):
         
     df=df.drop_duplicates(subset=['cik','tag','ddate','t_day'], keep='last')
 
-    di={"Assets" : "atq",
-        "StockholdersEquity" : "seqq",
-        "CommonStockSharesOutstanding" : "cshoq",
-        "OperatingIncomeLoss" : "oiadpq",
-        "CashAndCashEquivalentsAtCarryingValue" : "cheq"}
+    # standard way of replacing tags
+    di = {}
+    for account in accounts:
+        di[account] = rename_variables(account)
+
+    # di={"Assets" : "atq",
+    #     "StockholdersEquity" : "seqq",
+    #     "CommonStockSharesOutstanding" : "cshoq",
+    #     "OperatingIncomeLoss" : "oiadpq",
+    #     "CashAndCashEquivalentsAtCarryingValue" : "cheq"}
     df=df.replace({"tag": di})
             
     # drop ddate accepted
@@ -166,20 +182,20 @@ def prepare_sec(y,q):
                         columns='tag', 
                         values='v').reset_index()
             
-    df.to_csv(os.path.join(PATH_TO_SEC_DATA, f"sec{y}{q}", "aggregated.csv"), index=False)
+    
+    df.to_csv(os.path.join(PATH_TO_SEC_DATA, f"sec{y}{q}", name_file), index=False)
 
 
 # %%
-def process_all_data():
+def process_all_data(subset):
     years=range(2009, datetime.today().year+1)
     quarters=[1,2,3,4]
     for y in years:
         for q in quarters:
             print(f"{y} - {q}")
-            prepare_sec(y,q)
+            prepare_sec(y,q, subset = subset)
 # %%
 
-#process_all_data()
 
 
 #%%
@@ -295,7 +311,8 @@ def prepare_compustat_data():
 
 
 # %%
-def aggregate_sec_data():
+def aggregate_sec_data(full = False):
+    name_output = "sec_data_full.csv" if full else "sec_data.csv"
     years=range(2009, datetime.today().year+1)
     quarters=[1,2,3,4]
     df=pd.DataFrame()
@@ -303,18 +320,20 @@ def aggregate_sec_data():
         for q in quarters:
             print(f"{y} - {q}")
             try:
-                to_append=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, 
-                                                    f"sec{y}{q}", "aggregated.csv"))
+                name_file = "aggregated_full.csv" if full else "aggregated.csv"
+               
+                to_append=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, f"sec{y}{q}", name_file))
+
                 df=df.append(to_append)
             except:
                 pass
     df['source']='sec'
-    df.to_csv(os.path.join(PATH_TO_SEC_DATA, "sec_data.csv"), index=False)
+    df.to_csv(os.path.join(PATH_TO_SEC_DATA, name_output), index=False)
 
 
 #%%
 # Append compustat to sec
-def append_compustat_sec():
+def append_compustat_sec(only_sec = True, full=True):
     """
     # # Modifies the profitability by remoing the cumulative component
     # # x is an entire row
@@ -328,19 +347,21 @@ def append_compustat_sec():
     #                    & quarter(dofq(t_quarter[_n-2]))==2 ///
     #                    & quarter(dofq(t_quarter[_n-3]))==1 
     """
-    df        = pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "sec_data.csv"))
+    file_name = "sec_data_full.csv" if full else "sec_data.csv"
+    df        = pd.read_csv(os.path.join(PATH_TO_SEC_DATA, file_name))
 
-    to_append = pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "compustat_data.csv"))
+    if not only_sec:
+        to_append = pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "compustat_data.csv"))
 
-    # I only want to append, when data is missing, 
-    # * I was trying appending before the minimum but this leads to missing quarters
-    # * Better to append and remove duplicates carefully
+        # I only want to append, when data is missing, 
+        # * I was trying appending before the minimum but this leads to missing quarters
+        # * Better to append and remove duplicates carefully
 
-    df = df.append(to_append)
+        df = df.append(to_append)
 
-    df_link = pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "link.csv"))
-    df_link=df_link.drop_duplicates(subset=['cik'], keep='last')
-    df = pd.merge(df, df_link)
+        df_link = pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "link.csv"))
+        df_link=df_link.drop_duplicates(subset=['cik'], keep='last')
+        df = pd.merge(df, df_link)
 
     # An idea is once both sec and compustat data are available to keep only sec
     df['is_sec']=0
@@ -386,20 +407,42 @@ def append_compustat_sec():
     # plt.show()
 
     # Keep only the releant variables
-    var_keep=['cik', 't_day', 'ddate', 'atq', 'cheq', 'cshoq', 'oiadpq', 'seqq',
-       'source', 'gvkey', 'sic']
-    df=df.filter(var_keep, axis=1)
+    # var_keep=['cik', 't_day', 'ddate', 'atq', 'cheq', 'cshoq', 'oiadpq', 'seqq',
+    #    'source', 'gvkey', 'sic']
+    # df=df.filter(var_keep, axis=1)
 
     df.to_csv(os.path.join(PATH_TO_SEC_DATA, "fundamentals.csv"), index=False)
     
 
-        
 
+    
+#%%
+def rename_variables(varname):
+    """Renames a variable of the form AccruedEmployeeTerminationBenefits
+    into something like acemtebe
 
+    Args:
+        varname (varname): name of the variable
+    """
+    res = [idx for idx in range(len(varname)) if varname[idx].isupper()]
+    new_var = ""
+    for idx in res:
+        second = varname[idx+1].lower() if idx + 1 < len(varname) else ""
+        new_var += varname[idx].lower() + second
+
+    return new_var
+
+def store_variable_definitions(vars):
+    renames = [rename_variables(var) for var in vars]
+    info = {'variable' : renames, 'description' : vars}
+    df = pd.DataFrame.from_dict(info)
+    df.to_csv(os.path.join(PATH_TO_SEC_DATA,'variable_definitions.csv'), index = False)
 
 
 # %%
 if __name__=='__main__':
-    # update_all_data()
-    # append_compustat_sec()
-    aggregate_sec_data()
+    #update_all_data()
+    #process_all_data(subset = 100)
+    aggregate_sec_data(full = True)
+    append_compustat_sec(only_sec = True, full = True)
+    
