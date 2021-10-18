@@ -25,12 +25,12 @@ Log:
 
 // Loops over all dates
 local start = mdy(1,1,2010)
-local end   = mdy(9,9,2021)
+local end   = mdy(10,14,2021)
 forv t=`end'/`end'{
 	if dow(`t')==4{
-	qui{
+	//qui{
 	local PATH_TO_SEC_DATA: env PATH_TO_SEC_DATA
-	//local t = mdy(5, 27, 2021)
+	//local t = mdy(10, 7, 2021)
 	di %td `t'
 
 	local y = year(`t') 
@@ -81,6 +81,7 @@ forv t=`end'/`end'{
 	else{
 		local variables me bm prof cash avg_beta mret7 mret21 mret180
 	}
+	local variables me bm prof cash avg_beta mret7 mret21 mret180
 	xtreg Fexret `variables' if adjclose >=5, fe
 	
 	foreach var in `variables'{
@@ -100,6 +101,8 @@ forv t=`end'/`end'{
 
 	by cik: carryforward fe, replace
 	by cik: gen Fret=Eret + fe if t_day==`last_day'
+	
+	di %td `last_day'
 
 	keep if t_day ==`last_day'
 	keep if Fret  != . 
@@ -123,6 +126,6 @@ forv t=`end'/`end'{
 	save "`PATH_TO_SEC_DATA'\signals\v1\sp500`yy'-`mm'-`dd'.dta", replace
 
 		}
-	}
+	//}
 }
 		

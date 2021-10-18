@@ -1,7 +1,7 @@
 include("signal/Backtest.jl")
 using Dates, Plots
 min_date=Dates.Date(2010,1,1)
-max_date=Dates.Date(2010,1,15)
+max_date=Dates.Date(2010,7,15)
 time_span=min_date:Day(1):max_date # Iterator of dates
 #time_span=[t for t in time_span if dayofweek(t)==4]
 
@@ -10,7 +10,7 @@ time_span, frequency="d");
 
 # Winsorize the upper tail of the distribution of returns
 # so that extreme events "pure luck" do not mess our results
-histogram(ret_portfolio)
+#histogram(ret_portfolio)
 
 plot(time, cum_ret)
 plot!(time, cum_benchmark)

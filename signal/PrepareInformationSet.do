@@ -10,7 +10,22 @@ local max_y=real(substr("$S_DATE", -4, .))
 forv y=`max_y'/`max_y'{
 di "`y'"
 	qui{
+		/* Helps debugging
+		local PATH_TO_SEC_DATA: env PATH_TO_SEC_DATA
+		local y = 2021
+		*/
 		import delimited using "`PATH_TO_SEC_DATA'\information_set`y'.csv", clear
+		
+		// If gvkey doesnt exist, because we dont have compustat data as well, we create it
+		
+		capture confirm variable gvkey, exact
+			if !_rc {
+				display "gvkey exists in the sample"
+		   }
+		   else {
+			  display "gvkey not present, creating empty"
+			  gen gvkey = ""
+		   }
 
 		destring seqq, force replace
 		destring bm,   force replace

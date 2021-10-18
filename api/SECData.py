@@ -110,17 +110,9 @@ def get_sic_codes():
                 pass
     return sics
 
-#%%
-<<<<<<< HEAD
-
-
-
 
 #%%
-def prepare_sec(y,q):
-=======
 def prepare_sec(y,q, subset = 0):
->>>>>>> c19ae7d9703d5837840e77200bb29120032290ba
     main_path=os.path.join(PATH_TO_SEC_DATA, f"sec{y}{q}")
     # If we dont have the folder we dont try to rpocess the data
     if not os.path.exists(main_path):
@@ -450,8 +442,8 @@ def store_variable_definitions(vars):
 
 # %%
 if __name__=='__main__':
-    #update_all_data()
-    #process_all_data(subset = 100)
+    update_all_data()
+    process_all_data(subset = 100)
     aggregate_sec_data(full = True)
     append_compustat_sec(only_sec = True, full = True)
     

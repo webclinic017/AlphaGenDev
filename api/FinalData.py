@@ -70,6 +70,8 @@ def append_yahoo_finance(tickers, id):
     df_yahoo.to_csv(os.path.join(PATH_TO_SEC_DATA, 'yahoo_finance', f"aggregated_yf{id}.csv"), index=False)
 
 
+#%%
+
 
 #%%
 def merge_yf_sec():
@@ -79,6 +81,13 @@ def merge_yf_sec():
 
     df_sec=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "fundamentals.csv"))
     df_sec=df_sec.sort_values(['cik', 't_day'])
+    #* TEMPORAL
+    # Required columns
+    req_columns = ['cik', 't_day', 'sic', 'ddate', 'source', 
+                   'as', 'steq', 'costshou', 'opinlo', 'caancaeqatcava']
+    all_columns = [col for col in df_sec.columns if col not in req_columns]
+    # Print an idea of all the columns
+    df_sec = df_sec.loc[:, req_columns+all_columns[:40]]
     df_link=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "cik_ticker.csv"))
     df=df_yahoo.merge(df_link, on=['ticker']) #31414117
     df=df.dropna() #31089236
@@ -86,12 +95,18 @@ def merge_yf_sec():
 
     df=df.merge(df_sec, how='left',on=['cik', 't_day'])
 
+    print("Doing something computationally hard df=df.sort_values(['cik', 't_day'])")
     df=df.sort_values(['cik', 't_day'])
 
-    to_ffill=['atq', 'cheq', 'cshoq', 'oiadpq', 'seqq', 'sic']
+    df = df.rename(columns={'as': 'atq', 'steq': 'seqq', 'costshou': 'cshoq', 
+                        'opinlo': 'oiadpq', 'caancaeqatcava':'cheq'})
 
+    to_ffill=['atq', 'cheq', 'cshoq', 'oiadpq', 'seqq', 'sic']
+    #accounts=["Assets","StockholdersEquity", "CommonStockSharesOutstanding", "OperatingIncomeLoss","CashAndCashEquivalentsAtCarryingValue"]
+  
     for var in to_ffill:
         df[var] = df.groupby(['cik'])[var].ffill()
+
 
     
     # sics=get_sic_codes()
@@ -263,7 +278,7 @@ if __name__=='__main__':
 
 #if __name__=='__main__':
     start=time.time()
-    #append_yahoo_finance()
+    
     aggregate_yf_csv()
     merge_yf_sec()
     end=time.time()
