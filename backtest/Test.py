@@ -88,11 +88,11 @@ if firstTime:
             message = e
             not_added = not_added + 1
     # Pickle CEREBRO
-    print("Pickling Cerebro")
-    filename = f'cerebro_St'
-    outfile = open(filename,'wb')
-    pickle.dump(cerebro,outfile)
-    outfile.close()
+    # print("Pickling Cerebro")
+    # filename = f'cerebro_St'
+    # outfile = open(filename,'wb')
+    # pickle.dump(cerebro,outfile)
+    # outfile.close()
 
 
 # Unpickle
