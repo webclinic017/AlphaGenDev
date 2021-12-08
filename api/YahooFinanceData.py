@@ -33,6 +33,7 @@
 import pandas as pd 
 import numpy as np
 import datetime
+from pandas.io.parsers import read_csv
 import requests
 import urllib
 from tqdm.auto import tqdm
@@ -42,6 +43,14 @@ import os
 import time
 from multiprocessing import Process, Queue
 
+#%%
+import pandas as pd
+import os
+PATH_TO_SEC_DATA=os.environ['PATH_TO_SEC_DATA']
+df = pd.read_csv(f"{PATH_TO_SEC_DATA}/rebalance/2s.csv")
+df.TICKER = df.TICKER.apply(lambda x : x.upper())
+df.position_dollars = df.position_dollars.apply(lambda x : x/100)
+df.to_csv(f"{PATH_TO_SEC_DATA}/rebalance/2sigma.csv", index = False)
 #%%
 
 def get_yahoo_finance_data(t, update_all=False):

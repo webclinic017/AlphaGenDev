@@ -157,7 +157,7 @@ function simpleLong(α, σ)
 end
 
 
-function optimizationSquarePoint(α, σ, S, β, nl, ns, GRB_ENV; γ=5.0, only_long=false)
+function optimizationSquarePoint(α, σ, S, β, nl, ns, GRB_ENV, se; γ=5.0, only_long=false)
 
     model=JuMP.Model(with_optimizer(() -> Gurobi.Optimizer(GRB_ENV)))
     set_silent(model) 
@@ -205,7 +205,7 @@ function optimizationSquarePoint(α, σ, S, β, nl, ns, GRB_ENV; γ=5.0, only_lo
     K=size(S)[2]
 
     for k in 1:K
-        @constraint(model, sum((yp[i]+yn[i])*S[i,k] for i=1:N)<=sum((yp[i]+yn[i]) for i=1:N)*0.15)
+        @constraint(model, sum((yp[i]+yn[i])*S[i,k] for i=1:N)<=sum((yp[i]+yn[i]) for i=1:N)*se)
     end
 
     @constraint(model, sum(y[i] for i=1:N)==50.0)

@@ -116,7 +116,7 @@ def merge_yf_sec():
     # we need the sec or compustat data
     
 
-    etfs=["IYW", "IXC", "IYH", "IDU", "IJU", "IAU", "QUAL", "EFG", "^GSPC", "SPY"]
+    etfs=["IYW", "IXC", "IYH", "IDU", "IJU", "IAU", "QUAL", "EFG", "^GSPC", "SPY", "^IXIC", "^RUT"]
 
     before = int(time.mktime(date(1990,1,1).timetuple()))# Some starting date so I dont download all
     today=int(time.time())

@@ -51,6 +51,7 @@ using FixedEffectModels
 using LaTeXStrings
 using StatFiles
 using GLM
+using UrlDownload
 
 PATH_TO_SEC_DATA=ENV["PATH_TO_SEC_DATA"]
 
@@ -65,7 +66,7 @@ include("Tools.jl")
    
 
 
-function generate_backtest(min_date, max_date, time_span; frequency="w", verbose=false, type_signal="xb", nl=25, ns=25, pliquid=95, minprice=1.0, DD_tile=5)
+function generate_backtest(min_date, max_date, time_span; frequency="w", verbose=false, type_signal="xb", nl=25, ns=25, pliquid=95, minprice=1.0, DD_tile=5, se=0.15)
 
     #If we have a weekly frequency we need the same day in the time_span
     daysw=[dayofweek(t) for t in time_span]
@@ -87,8 +88,12 @@ function generate_backtest(min_date, max_date, time_span; frequency="w", verbose
     information_sets=[CSV.read("$(PATH_TO_SEC_DATA)\\information_set$y.csv", DataFrame) for y in miny:1:maxy] 
                 
     #Information on the benchmark
-    benchmark=CSV.read("$(PATH_TO_SEC_DATA)\\yahoo_finance\\data_etfs\\^GSPC.csv", DataFrame)
+    benchmark=CSV.read("$(PATH_TO_SEC_DATA)\\yahoo_finance\\data_etfs\\^GSPC_all.csv", DataFrame)
+    rename!(benchmark, Symbol("Date") => :t_day)
+    rename!(benchmark, Symbol("Adj Close") => :adjclose)
+    
     ret_portfolio=[]
+    ret_portfolio_rel = []
     ret_benchmark=[]
     tickers=[]
     weights=[]
@@ -124,6 +129,11 @@ function generate_backtest(min_date, max_date, time_span; frequency="w", verbose
     # # Data from SIC codes
     # sics=CSV.read(SICFILE[], DataFrame)
     problematic=[]
+
+    # Here we store the information required by twosigma
+    time_2σ = []
+    ticker_2σ = []
+    positions_2σ = []
 
     df_bought=DataFrame()
     for t in time_span
@@ -219,8 +229,80 @@ function generate_backtest(min_date, max_date, time_span; frequency="w", verbose
         df=innerjoin(df, df_combined2, on = :ticker)
         sort!(df, [order(:ticker)])
 
+        # Compute benchmark
+        bm_url = "https://pkgstore.datahub.io/core/nasdaq-listings/nasdaq-listed-symbols_csv/data/595a1f263719c09a8a0b4a64f17112c6/nasdaq-listed-symbols_csv.csv"
+        bm = urldownload(bm_url) |> DataFrame
+        rename!(bm, :Symbol => :ticker)
+        select!(bm, :ticker)
+        # Return on nasdaq that day
+        df_nasdaq = CSV.read("$(PATH_TO_SEC_DATA)\\yahoo_finance\\data_etfs\\^IXIC.csv", DataFrame)
+        rename!(df_nasdaq, Symbol("^IXIC_ret") => :ret_nasdaq)
+        df_nasdaq=@from i in df_nasdaq begin
+            @where (i.t_day == t)
+            @select {i.t_day, i.ret_nasdaq}
+            @collect DataFrame        
+        end
+
+        try
+            insertcols!(bm, :ret_b => df_nasdaq.ret_nasdaq[1])
+        catch
+            insertcols!(bm, :ret_b => 0.0)
+        end
+        bm.ticker = lowercase.(bm.ticker)
+
+        df = leftjoin(df, bm, on = :ticker, makeunique=true)
+
         
+        bm_url = "https://gist.githubusercontent.com/ZeccaLehn/f6a2613b24c393821f81c0c1d23d4192/raw/fe4638cc5561b9b261225fd8d2a9463a04e77d19/SP500.csv"
+        bm = urldownload(bm_url) |> DataFrame
+        rename!(bm, :Symbol => :ticker)
+        select!(bm, :ticker)
+        df_sp500 = CSV.read("$(PATH_TO_SEC_DATA)\\yahoo_finance\\data_etfs\\^GSPC.csv", DataFrame)
+        rename!(df_sp500, Symbol("ret") => :ret_sp500)
+        rename!(df_sp500, Symbol("date") => :t_day)
+        df_sp500=@from i in df_sp500 begin
+            @where (i.t_day == t)
+            @select {i.t_day, i.ret_sp500}
+            @collect DataFrame        
+        end
+
+        try
+            insertcols!(bm, :ret_b2 => df_sp500.ret_sp500[1])
+        catch
+            insertcols!(bm, :ret_b2 => 0.0)
+        end
+        bm.ticker = lowercase.(bm.ticker)
+
+        df = leftjoin(df, bm, on = :ticker, makeunique=true)
+
+        df_rut = CSV.read("$(PATH_TO_SEC_DATA)\\yahoo_finance\\data_etfs\\^RUT.csv", DataFrame)
+        rename!(df_rut, Symbol("^RUT_ret") => :ret_rut)
+        df_rut=@from i in df_rut begin
+            @where (i.t_day == t)
+            @select {i.t_day, i.ret_rut}
+            @collect DataFrame        
+        end
+
+        try
+            insertcols!(df, :ret_b3 => df_rut.ret_rut[1])
+        catch
+            insertcols!(df, :ret_b3 => 0.0)
+        end
+
+        # Pecking order is sp500, nasdaq and rusell
+        insertcols!(df, :ben => 0.0)
+
+        df[.!(ismissing.(df.ret_b)), :ben] = df.ret_b[.!(ismissing.(df.ret_b))]
+
+        df[.!(ismissing.(df.ret_b2)), :ben] = df.ret_b2[.!(ismissing.(df.ret_b2))]
+
+        df[ df.ben .== 0.0, :ben ] = df.ret_b3[df.ben .== 0.0]
+        
+
+
+       
         ret_pre_trade=0
+        ret_pre_trade_rel=0
         if (size(df_bought)[1]>0) & (size(df)[1] > 0)
             prices_before_open=[]
             for tick in df_bought.ticker
@@ -237,9 +319,11 @@ function generate_backtest(min_date, max_date, time_span; frequency="w", verbose
             for i=1:size(df_bought)[1]
                 R=prices_before_open[i] / df_bought.price[i]
                 if !ismissing(R)
-                ret_pre_trade += (df_bought.ω[i]/100)*(R- 1)
+                    ret_pre_trade += (df_bought.ω[i]/100)*(R- 1)
+                    ret_pre_trade_rel += (df_bought.ω[i]/100)*(R - 1-df_bought.ben[i])
                 else
-                ret_pre_trade += 0.0
+                    ret_pre_trade += 0.0
+                    ret_pre_trade_rel += 0.0
                 end
             end
             
@@ -248,6 +332,11 @@ function generate_backtest(min_date, max_date, time_span; frequency="w", verbose
         end
 
         #.* (!).(isnan.(df.illiq_mean))
+        select!(df, Not(:ret_b))
+        select!(df, Not(:ret_b2))
+        select!(df, Not(:ret_b3))
+        #select!(df, Not(:me_last))
+        #select!(df, Not(:ben))
         df=df[completecases(df) , :]
         df=df[df.DD .>= percentile(df.DD, DD_tile), :] #! Avoids the retail frenzy
         #df=df[df.sd_resid .> 0.0, :]
@@ -276,16 +365,11 @@ function generate_backtest(min_date, max_date, time_span; frequency="w", verbose
         if dayofweek(t)==4
 
             #Market predictability, can I say anything about the market?
-         
-           
-            
-           
-
             
             if type_signal=="xb"
-            α=df.Eret 
+                α=df.Eret 
             elseif type_signal=="xb+fe"
-            α=df.Fret
+                α=df.Fret
             end
             σ=df.sd_resid
             df.one_sic=convert.(Int64, floor.(df.sic_last ./ 1000))
@@ -294,17 +378,19 @@ function generate_backtest(min_date, max_date, time_span; frequency="w", verbose
             nLong=nl
             nShort=ns
             #S=[]
-            ω_value, y_value, yp_value, yn_value= optimizationSquarePoint(α , σ, S, β, nLong, nShort, env)
-           
+            
+                ω_value, y_value, yp_value, yn_value= optimizationSquarePoint(α , σ, S, β, nLong, nShort, env, se)
+         
             tickers=df.ticker[y_value .≈ 1]
             prices=df.adjclose_last[y_value .≈ 1 ]
+            ben=df.ben[y_value .≈ 1 ]
             weights=ω_value[y_value .≈ 1]
             y_var=y_value
 
             @assert (sum(y_value) ≈ 50 ) 
             @assert (size(tickers)[1]≈ 50)
 
-            df_bought=DataFrame(ω=weights, ticker=tickers, price=prices)
+            df_bought=DataFrame(ω=weights, ticker=tickers, price=prices, ben = ben)
 
         end
         
@@ -327,6 +413,8 @@ function generate_backtest(min_date, max_date, time_span; frequency="w", verbose
                 @collect DataFrame   
             end
         end
+
+        df_portfolio = innerjoin(df_portfolio, df, on = :ticker)
 
         #Merge the returns
         df=leftjoin(df_portfolio, df_ret, on=:ticker)
@@ -367,7 +455,10 @@ function generate_backtest(min_date, max_date, time_span; frequency="w", verbose
 
             port_ret=(1+sum(df.ret[i]*df.ω[i]/100 for i=1:size(df)[1]))*(1+ret_pre_trade)-1
             
+            port_ret_rel=(1+sum((df.ret[i]-df.ben[i])*df.ω[i]/100 for i=1:size(df)[1]))*(1+ret_pre_trade_rel)-1
+            
             push!(ret_portfolio, port_ret)
+            push!(ret_portfolio_rel, port_ret_rel)
             
             if port_ret*100 > info["best_return"]
                 info["best_return"] = round(port_ret*100, digits=2)
@@ -404,7 +495,7 @@ function generate_backtest(min_date, max_date, time_span; frequency="w", verbose
 
             push!(time, t)
             try
-            df_bought=DataFrame(ω=df.ω, ticker=df.ticker, price=df.adjclose)
+            df_bought=DataFrame(ω=df.ω, ticker=df.ticker, price=df.adjclose, ben = df.ben)
             catch e
                 println(df.ω)
                 println(df.adjclose)
@@ -413,12 +504,22 @@ function generate_backtest(min_date, max_date, time_span; frequency="w", verbose
             end
         end
 
+
+        positions_2σ = vcat(positions_2σ, weights) 
+        ticker_2σ    = vcat(ticker_2σ, tickers)
+
+        t_2σ = "$(year(t))-$(month(t))-$(day(t)) 14:00:00Z"
+        time_2σ      = vcat(time_2σ, [t_2σ for w in weights])
         push!(TICKERS, tickers)
         push!(WEIGHTS, weights)
 
     end
 
-return time, ret_portfolio, cum_ret, cum_benchmark, TICKERS, WEIGHTS, nlongs, nshorts, ret_benchmark, problematic
+
+    df_2σ = DataFrame(time = time_2σ, TICKER = ticker_2σ, position_dollars = positions_2σ)
+    CSV.write("$(PATH_TO_SEC_DATA)\\rebalance\\2s.csv", df_2σ)
+
+return time, ret_portfolio, cum_ret, cum_benchmark, TICKERS, WEIGHTS, nlongs, nshorts, ret_benchmark, problematic, ret_portfolio_rel
 
 # plot()
 # plot!(time, cum_ret)

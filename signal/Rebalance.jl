@@ -27,7 +27,7 @@ PATH_TO_SEC_DATA=ENV["PATH_TO_SEC_DATA"]
 
 include("PortfolioManagement.jl")
 include("Tools.jl")
-t=Date(2021, 10, 14)
+t=Date(2021, 11, 25)
 y=year(t)
 information_set=CSV.read("$(PATH_TO_SEC_DATA)\\information_set$y.csv", DataFrame)
 information_set2=CSV.read("$(PATH_TO_SEC_DATA)\\information_set$(y-1).csv", DataFrame)
@@ -147,7 +147,18 @@ nLong=25
 nShort=25
 #S=[]
 env=Gurobi.Env()
-ω_value, y_value, yp_value, yn_value= optimizationSquarePoint(α , σ, S, β, nLong, nShort, env)
+ω_value, y_value, yp_value, yn_value= optimizationSquarePoint(α , σ, S, β, nLong, nShort, env, 0.15)
+
+
+# Here we do a simpler version, 50 long and 50 short sorted
+tick = df.ticker
+tick_neg = tick[sortperm(α)]
+tick_pos = tick[sortperm(α, rev=true)]
+alpha_neg = α[sortperm(α)]
+alpha_pos = α[sortperm(α, rev=true)]
+
+df2 = DataFrame(tick_neg = tick_neg, alpha_neg = alpha_neg, tick_pos = tick_pos, alpha_pos = alpha_pos)
+CSV.write("$(PATH_TO_SEC_DATA)\\rebalance\\$(t)_.csv", df2)
 #ω_value, y_value, yp_value, yn_value= simpleLongShort(α , σ)
 # #**************************************************************************************
 # ub=1/10
