@@ -73,14 +73,14 @@ if load_again:
     #%%
 
     print("Pickling Cerebro")
-    filename = f'cerebro_St'
+    filename = f'{PATH_TO_SEC_DATA}/cerebros/cerebro_St'
     outfile = open(filename,'wb')
     pickle.dump(cerebro,outfile)
     outfile.close()
 
 #%%
 #cerebro.broker.setcommission(commission=0.001)
-with open("cerebro_St", "rb") as f:
+with open("{PATH_TO_SEC_DATA}/cerebros/cerebro_St", "rb") as f:
     cerebro = pickle.load(f)
 
 cerebro.addstrategy(St)
