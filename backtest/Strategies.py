@@ -20,11 +20,6 @@ from matplotlib import pyplot as plt
 import pickle
 PATH_TO_SEC_DATA=os.environ['PATH_TO_SEC_DATA']
 
-from pandas.tseries.holiday import USFederalHolidayCalendar
-cal = USFederalHolidayCalendar()
-holidays = cal.holidays(start='2000-01-01', end='2021-12-31').to_pydatetime()
-df = pd.read_csv(f"{PATH_TO_SEC_DATA}/yahoo_finance/data/msft.csv")
-df.date = df.date.apply(lambda x : pd.to_datetime(x))
 #%%
 # Some methods are depreciated, we want to avoid excesive warnings
 import sys
@@ -38,8 +33,8 @@ def load_data(re_load = False):
     # Utils, we create the information set in parquet format as csv takes too much to load
     signal_files=os.listdir(f"{PATH_TO_SEC_DATA}\\signals\\v1")
     #Dates.Date(
-    signal_files=[datetime.strptime(file[6:-4], "%Y-%m-%d") for file in signal_files if file[0:6]=="signal"]
-
+    signal_files=[datetime.strptime(file[6:-4], "%Y-%m-%d") for file in signal_files if (file[0:6]=="signal") and (int(file[6:10])>=2010)]
+    
     years = [d.year for d in signal_files]
     miny = min(years)
     maxy = max(years)
@@ -52,16 +47,16 @@ def load_data(re_load = False):
     #%%def clean_companies(df):
     # For what days we have signals?
     # Read the files from parquet
-    information_sets=[pd.read_parquet(f'{PATH_TO_SEC_DATA}\\information_set{y}.gzip', engine='pyarrow') for y in range(2010,maxy+1)] 
+    information_sets=[pd.read_parquet(f'{PATH_TO_SEC_DATA}\\information_set{y}.gzip', engine='pyarrow') for y in range(miny,maxy+1)] 
     return information_sets, signal_files
 
 #%%
 
-def retrieve_portfolio(t, information_sets, signal_files, DD_tile = 5, pliquid = 90, minprice = 2, nl = 25, ns = 25):
+def retrieve_portfolio(t, information_sets, signal_files, DD_tile = 0, pliquid = 90, minprice = 2, nl = 25, ns = 25):
     #t = datetime(2021, 11, 25)
     y = t.year
     years = [d.year for d in signal_files]
-    miny = 2010
+    miny = min(years)
     maxy = max(years)
     information_set=information_sets[y-miny]
     
@@ -155,61 +150,50 @@ def retrieve_portfolio(t, information_sets, signal_files, DD_tile = 5, pliquid =
     # Get stocks sorted
     # sort on Eret and take top 50 and bottom 50
     df = df.sort_values(by = ['Eret'])
+    #df = df.sort_values(by = ['Fret'])
 
     tickers_long  = df.ticker[-(nl+1):-1]
     tickers_short = df.ticker[:ns]
     #%%
     return tickers_long, tickers_short, df.ticker
 #%%
-class St(bt.Strategy):
 
-    # Default, and keyword parameters of the strategy
-    params = dict(
-         some_param = True
-    )
+class St(bt.Strategy):
 
     def __init__(self):
         print("Loading Data...")
         self.information_sets, self.signal_files = load_data()
         self.last_tickets = []
+        self.times_traded = 0
+        
 
-    def prenext(self):
-        # Populate d_with_len
-        self.d_with_len = [d for d in self.datas if len(d)]
-        # call next() even when data is not available for all tickers
-        self.next()
-
-    def nextstart(self):
-        # This is called exactly ONCE, when next is 1st called and defaults to
-        # call `next`
-        self.d_with_len = self.datas  # all data sets fulfill the guarantees now
-
-        self.next()  # delegate the work to next
-
+   
     def next(self):
-
-
-        # Obtain the signal data for today
         t = self.datetime.date()
 
-        # Always Assert we have not NaN data which can be caused by some missing values
-        assert not np.isnan(self.broker.get_value())
-        
-        if t.weekday() == 3:
+        # Increment the # of times traded once a week, since Python doesnt really have a once a month
+        # option
+        if t.weekday() == 1:
+            self.times_traded += 1
 
+
+        if (t.weekday() == 3) and (self.times_traded % 4 == 0):
             
             tickers_long, tickers_short, tickers= retrieve_portfolio(t, self.information_sets, self.signal_files)
             
             # Some stocks will go to 0, some will have weights
             # tickers in last that are not in new
+            universe = [d._name for d in self.datas]
+            
             new = tickers_long.tolist() + tickers_short.tolist()
+           
             go_out = [ti for ti in self.last_tickets if ti not in new]
 
             # load only the data
-            d_with_len = self.d_with_len
-            d_go_out = [d for d in d_with_len if d._name in go_out]
+            d_with_len = self.datas
+            d_go_out = [d for d in d_with_len if d._name.lower() in go_out]
 
-            d_new    = [d for d in d_with_len if d._name in new]
+            d_new    = [d for d in d_with_len if d._name.lower() in new]
 
             self.last_tickets = new
             for i,d in enumerate(d_go_out):
@@ -217,20 +201,20 @@ class St(bt.Strategy):
                     
                 # Weights
                 price = d.close[0]
-                pos = self.getposition(d).size
-                if  not np.isnan(price) and not pos:
+                
+                if  (not np.isnan(price)) and (price != 0.0):
                         
                     self.order = self.order_target_percent(data=d, target = 0.0 )
                     pos = self.getposition(d).size 
                     weight_in_port = 100*pos*price/self.broker.get_value()
                                 
-                    value_port = self.broker.get_value()
+                    value_pos = pos*price 
                 
                     print("{} {:15s} Price {:8.2f} Shares {:6.1f} Weight (%) {:6.1f} Value Portfolio {:6.1f} Close Position".format(t, dn, 
                                                                                                                              price, 
                                                                                                                              pos,
-                                                                                                                             weight_in_port,
-                                                                                                                             value_port))
+                                                                                                                    weight_in_port,
+                                                                                                                             value_pos))
             for i,d in enumerate(d_new):
                 dn = d._name
                     
@@ -244,21 +228,23 @@ class St(bt.Strategy):
 
                 prices = d.close
 
-                if  not np.isnan(price):
+                if  not np.isnan(price) and (price != 0.0):
                         
                     self.order = self.order_target_percent(data=d, target = target )
                     pos = self.getposition(d).size 
                     weight_in_port = 100*pos*price/self.broker.get_value()
                                 
-                    value_port = self.broker.get_value()
+                    value_pos = pos*price
                 
-                    print("{} {:15s} Price {:8.2f} Shares {:6.1f} Weight (%) {:6.1f} Value Portfolio {:6.1f}".format(t, dn, 
-                                                                                                                             price, 
-                                                                                                                             pos,
-                                                                                                                             weight_in_port,
-                                                                                                                             value_port))
+                    print("{} {:15s} Price {:8.2f} Shares {:6.1f} Weight (%) {:6.1f} Value Portfolio {:6.1f}".format(t, 
+                                                                                                                    dn,
+                                                                                                                    price,
+                                                                                                                    pos,
+                                                                                                                    weight_in_port,
+                                                                                                                    value_pos))
            
-                
+            value_port = self.broker.get_value() 
+            print(f"Value of Portfolio: {value_port}")
 
 
 
@@ -336,9 +322,9 @@ def filter_tickers():
         return the tickers that actually we might use expost, 
         this function is designed to be ran only from time to time
     """
-    information_sets, signal_files = load_data()
+    information_sets, signal_files = load_data(re_load = True)
 
-    start_date = datetime(2010, 1, 1)
+    start_date = datetime(2011, 1, 1)
     end_date   = datetime(2021,11,25)
     all_tickers=np.array([])
     print("Retrieving valid tickers")
@@ -352,7 +338,9 @@ def filter_tickers():
 
     return np.unique(all_tickers)
 
+#%%
 if __name__ == '__main__':
+
     all_tickers = filter_tickers()
     #pickle_cerebro(all_tickers)
 
