@@ -74,7 +74,7 @@ def append_yahoo_finance(tickers, id):
 
 
 #%%
-def merge_yf_sec():
+def merge_yf_sec(K):
 # We start with the pricing data and then add the accouting data
     print("Reading Data")
     df_yahoo=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, 'yahoo_finance', 'aggregated_yf.csv'))
@@ -84,10 +84,10 @@ def merge_yf_sec():
     #* TEMPORAL
     # Required columns
     req_columns = ['cik', 't_day', 'sic', 'ddate', 'source', 
-                   'as', 'steq', 'costshou', 'opinlo', 'caancaeqatcava']
+                   'as', 'steq', 'costshou', 'opinlo', 'caancaeqatcava', 'li']
     all_columns = [col for col in df_sec.columns if col not in req_columns]
     # Print an idea of all the columns
-    df_sec = df_sec.loc[:, req_columns+all_columns[:40]]
+    df_sec = df_sec.loc[:, req_columns+all_columns[:K]]
     df_link=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "cik_ticker.csv"))
     df=df_yahoo.merge(df_link, on=['ticker']) #31414117
     df=df.dropna() #31089236
@@ -101,7 +101,7 @@ def merge_yf_sec():
     df = df.rename(columns={'as': 'atq', 'steq': 'seqq', 'costshou': 'cshoq', 
                         'opinlo': 'oiadpq', 'caancaeqatcava':'cheq'})
 
-    to_ffill=['atq', 'cheq', 'cshoq', 'oiadpq', 'seqq', 'sic']
+    to_ffill=['atq', 'cheq', 'cshoq', 'oiadpq', 'seqq', 'sic', 'li']
     #accounts=["Assets","StockholdersEquity", "CommonStockSharesOutstanding", "OperatingIncomeLoss","CashAndCashEquivalentsAtCarryingValue"]
   
     for var in to_ffill:
@@ -253,34 +253,34 @@ def aggregate_yf_csv():
 #%%
 if __name__=='__main__':
 
-    start=time.time()
-    df=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "cik_ticker.csv"))
-    tickers=df.ticker
-    nb=os.cpu_count() 
-    batches=np.array_split(tickers,nb)
-    print(f"Batches of size {[len(batch) for batch in batches]}")
+    # start=time.time()
+    # df=pd.read_csv(os.path.join(PATH_TO_SEC_DATA, "cik_ticker.csv"))
+    # tickers=df.ticker
+    # nb=os.cpu_count() 
+    # batches=np.array_split(tickers,nb)
+    # print(f"Batches of size {[len(batch) for batch in batches]}")
 
-    print(f"Spliting the sample into {len(batches)} batches")
-    processes = [Process(target=append_yahoo_finance, args=(batches[i], i)) for i in range(nb)]
+    # print(f"Spliting the sample into {len(batches)} batches")
+    # processes = [Process(target=append_yahoo_finance, args=(batches[i], i)) for i in range(nb)]
 
-    for p in processes:
-        p.start()
+    # for p in processes:
+    #     p.start()
 
-    for p in processes:
-        p.join()
+    # for p in processes:
+    #     p.join()
 
-    end=time.time()
-    time_ellapsed=end-start
-    t=round(time_ellapsed, 2)
-    n=len(tickers)
-    print(f"{t} seconds - for {n} tickers")
+    # end=time.time()
+    # time_ellapsed=end-start
+    # t=round(time_ellapsed, 2)
+    # n=len(tickers)
+    # print(f"{t} seconds - for {n} tickers")
 
 
 #if __name__=='__main__':
     start=time.time()
     
     aggregate_yf_csv()
-    merge_yf_sec()
+    merge_yf_sec(20)
     end=time.time()
     time_ellapsed=end-start
     t=round(time_ellapsed, 2)

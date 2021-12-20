@@ -87,34 +87,26 @@ if firstTime:
         except Exception as e:
             message = e
             not_added = not_added + 1
-    # Pickle CEREBRO
-    # print("Pickling Cerebro")
-    # filename = f'cerebro_St'
-    # outfile = open(filename,'wb')
-    # pickle.dump(cerebro,outfile)
-    # outfile.close()
+ 
 
-
-<<<<<<< HEAD
     print("Pickling Cerebro")
     filename = f'{PATH_TO_SEC_DATA}/cerebros/cerebro_St'
     outfile = open(filename,'wb')
     pickle.dump(cerebro,outfile)
     outfile.close()
-=======
-# Unpickle
-# print("Unpickling Cerebro")
-# with open(f'cerebro_St', "rb") as input_file:
-#     cerebro = pickle.load(input_file)
->>>>>>> parent of 7fb2da9 (Commit backtrader)
+
+
+print("Unpickling Cerebro")
+with open(f'cerebro_St', "rb") as input_file:
+    cerebro = pickle.load(input_file)
+
 
 cerebro.broker.setcash(1000000.0)
 #cerebro.broker.setcommission(commission=0.001)
-<<<<<<< HEAD
+
 with open("{PATH_TO_SEC_DATA}/cerebros/cerebro_St", "rb") as f:
     cerebro = pickle.load(f)
-=======
->>>>>>> parent of 7fb2da9 (Commit backtrader)
+
 
 # To analyze data
 cerebro.addanalyzer(bt.analyzers.PyFolio, _name='pyfolio')

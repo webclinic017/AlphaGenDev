@@ -7,13 +7,13 @@ into a Stata readable format so that data can be loaded and unloaded faster
 
 local PATH_TO_SEC_DATA: env PATH_TO_SEC_DATA
 local max_y=real(substr("$S_DATE", -4, .))
-forv y=`max_y'/`max_y'{
+forv y=2009/`max_y'{
 di "`y'"
 	qui{
-		/* Helps debugging
-		local PATH_TO_SEC_DATA: env PATH_TO_SEC_DATA
-		local y = 2021
-		*/
+		/* Helps debugging */
+		//local PATH_TO_SEC_DATA: env PATH_TO_SEC_DATA
+		//local y = 2021
+		
 		import delimited using "`PATH_TO_SEC_DATA'\information_set`y'.csv", clear
 		
 		// If gvkey doesnt exist, because we dont have compustat data as well, we create it
@@ -27,15 +27,15 @@ di "`y'"
 			  gen gvkey = ""
 		   }
 
-		destring seqq, force replace
-		destring bm,   force replace
-		destring beta, force replace
-		destring me,   force replace
-		destring prof, force replace
-		destring cash, force replace
-		destring ret, force replace
-		destring mret7, force replace
-		destring mret21, force replace
+		destring seqq,    force replace
+		destring bm,      force replace
+		destring beta,    force replace
+		destring me,      force replace
+		destring prof,    force replace
+		destring cash,    force replace
+		destring ret,     force replace
+		destring mret7,   force replace
+		destring mret21,  force replace
 		destring mret180, force replace
 
 		gen tt_day=date(t_day,  "YMD")
@@ -43,7 +43,22 @@ di "`y'"
 		drop t_day
 		rename tt_day t_day
 		
+		// Compute an industry p_e
+		sort sic t_day
+		// We include a variable for P/E
+		gen p_e = prc7/(oiadpq/cshoq) // Price per earnings per share
+		by sic t_day: egen avg_pe = mean(p_e)
+		gen dev_pe = p_e-avg_pe // Deviation from industry
 		
+		
+		
+		gen MDR = li/(li+close*cshoq)
+		by sic t_day: egen TL = mean(MDR)
+		gen RL = MDR-TL
+		
+		gen mprof = oiadpq/(li+close*cshoq)
+		by sic t_day: egen avg_prof = mean(mprof)
+		gen dev_prof = mprof-avg_prof
 		//**********************
 		// LABELS
 		//**********************
@@ -89,7 +104,10 @@ di "`y'"
 		label var       mret21 "adjclose/prc21 - 1"     
 		label var      mret180 "adjclose/prc180 - 1"     
 		label var         year "Year"     
-		label var        t_day "Date with a daily format"   
+		label var        t_day "Date with a daily format"  
+		label var       dev_pe "Deviation of P/E from Industry"
+		label var     dev_prof "Deviation of Profitability from Industry"
+		label var           RL "Relative Leverage"
 
 		save "`PATH_TO_SEC_DATA'\information_set`y'.dta", replace
 	}

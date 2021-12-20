@@ -25,10 +25,10 @@ Log:
 
 // Loops over all dates
 local start = mdy(1,1,2010)
-local end   = mdy(11,25,2021)
-forv t=`end'/`end'{
+local end   = mdy(12,16,2021)
+forv t=`start'/`end'{
 	if dow(`t')==4{
-	//qui{
+	qui{
 	local PATH_TO_SEC_DATA: env PATH_TO_SEC_DATA
 	//local t = mdy(10, 7, 2021)
 	di %td `t'
@@ -67,7 +67,7 @@ forv t=`end'/`end'{
 
 	//drop if adjclose < 1
 	// We need complete cases of firm characteristics
-	foreach var in Fexret me bm prof cash avg_beta mret7 mret21 mret180{
+	foreach var in Fexret me bm prof cash avg_beta mret7 mret21 mret180 RL dev_pe dev_prof{
 	di "`var'"
 		winsor2 `var', replace cuts(0.5 99.5)
 	}
@@ -81,8 +81,12 @@ forv t=`end'/`end'{
 	else{
 		local variables me bm prof cash avg_beta mret7 mret21 mret180
 	}
-	local variables me bm prof cash avg_beta mret7 mret21 mret180
+	//local variables me bm prof cash avg_beta mret7 mret21 mret180
+	
+	local variables_extended `variables' RL dev_pe dev_prof
 	xtreg Fexret `variables' if adjclose >=5, fe
+	
+	
 	
 	foreach var in `variables'{
 		gen _b_`var'=_b[`var']	
@@ -101,6 +105,20 @@ forv t=`end'/`end'{
 
 	by cik: carryforward fe, replace
 	by cik: gen Fret=Eret + fe if t_day==`last_day'
+	
+	// Extensions of the model, e.g. use RL and other deviations, let's call it complete
+	
+	xtreg Fexret `variables_extended' if adjclose >=5, fe
+	
+	predict Eret_extended if t_day== `last_day', xb
+	predict fe_extended, u
+	
+	predict resid_extended, resid
+	egen sd_resid_extended = sd(resid), by(cik)
+	//Idiosyncratic volatility
+
+	by cik: carryforward fe_extended, replace
+	by cik: gen Fret_extended=Eret_extended + fe_extended if t_day==`last_day'
 	
 	di %td `last_day'
 
@@ -126,6 +144,6 @@ forv t=`end'/`end'{
 	save "`PATH_TO_SEC_DATA'\signals\v1\sp500`yy'-`mm'-`dd'.dta", replace
 
 		}
-	//}
+	}
 }
 		
