@@ -27,7 +27,7 @@ PATH_TO_SEC_DATA=ENV["PATH_TO_SEC_DATA"]
 
 include("PortfolioManagement.jl")
 include("Tools.jl")
-t=Date(2021, 11, 25)
+t=Date(2022, 1, 6)
 y=year(t)
 information_set=CSV.read("$(PATH_TO_SEC_DATA)\\information_set$y.csv", DataFrame)
 information_set2=CSV.read("$(PATH_TO_SEC_DATA)\\information_set$(y-1).csv", DataFrame)

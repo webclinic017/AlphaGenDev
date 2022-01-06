@@ -12,10 +12,10 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import pyfolio as pf
-from AlphaGenStrategies import *
 from matplotlib import pyplot as plt
 import pickle
-
+import time
+from scipy import stats
 PATH_TO_SEC_DATA=os.environ['PATH_TO_SEC_DATA']
 
 import sys
@@ -24,8 +24,23 @@ if not sys.warnoptions:
     import warnings
     warnings.simplefilter("ignore")
 #%%
+# Fast decorator to time functions
+def timeit(method):
+    def timed(*args, **kw):
+        ts = time.time()
+        result = method(*args, **kw)
+        te = time.time()        
+        if 'log_time' in kw:
+            name = kw.get('log_name', method.__name__.upper())
+            kw['log_time'][name] = int((te - ts) * 1000)
+        else:
+            print('%r  %2.2f ms' % \
+                  (method.__name__, (te - ts) * 1000))
+        return result    
+    return timed
+#%%
 
-def load_data(re_load = False):
+def load_data(re_load = False, minyy=2009):
     # Utils, we create the information set in parquet format as csv takes too much to load
     signal_files=os.listdir(f"{PATH_TO_SEC_DATA}\\signals\\v1")
     #Dates.Date(
@@ -43,17 +58,18 @@ def load_data(re_load = False):
     #%%def clean_companies(df):
     # For what days we have signals?
     # Read the files from parquet
-    information_sets=[pd.read_parquet(f'{PATH_TO_SEC_DATA}\\information_set{y}.gzip', engine='pyarrow') for y in range(2010,maxy+1)] 
-    return information_sets, signal_files
+    information_sets=[pd.read_parquet(f'{PATH_TO_SEC_DATA}\\information_set{y}.gzip', engine='pyarrow') for y in range(minyy,maxy+1)] 
+    return information_sets
 
-def retrieve_portfolio(t, information_sets, signal_files, 
-                       DD_tile = 5, 
+def retrieve_portfolio(t, information_sets, 
+                       DD_tile = 2, 
                        pliquid = 90, 
                        minprice = 2, 
                        nl = 25, 
                        ns = 25,
                        type_signal = 'Eret',
-                       miny = 2010):
+                       miny = 2010,
+                       correct_precision = False):
     """Function that retrieves a portfolio to invest at time t, to avoid excessive
        data preallocation by default we start in 2010
 
@@ -75,11 +91,9 @@ def retrieve_portfolio(t, information_sets, signal_files,
         df.ticker : all tickers after filtering
     """
    
-    y = t.year
-    years = [d.year for d in signal_files]
-    
-    maxy = max(years)
-    information_set=information_sets[y-miny]
+    y = t.year    
+  
+    information_set=[i_set for i_set in information_sets if i_set.iloc[0].year == y][0]
     
     try:
         information_set.t_day = information_set.t_day.apply(lambda x : datetime.strptime(x, '%Y-%m-%d'))
@@ -92,7 +106,7 @@ def retrieve_portfolio(t, information_sets, signal_files,
 
     # append
     if y > miny:
-        df_a = information_sets[y-miny-1] 
+        df_a = [i_set for i_set in information_sets if i_set.iloc[0].year == y - 1][0] 
         df_a = df_a[['t_day', 'open', 'adjclose', 'volume', 'ticker', 'ret', 'cshoq', 'sic', 'beta']]
         try:
             df_a.t_day = df_a.t_day.apply(lambda x : datetime.strptime(x, '%Y-%m-%d'))
@@ -140,16 +154,14 @@ def retrieve_portfolio(t, information_sets, signal_files,
     df_agg['adjclose_minimum'] = df.groupby('ticker').adjclose.min()   
     df_agg.reset_index(level=0, inplace=True)
 
-    sf = np.array(signal_files)
-    sf[np.where(np.array(sf) == t)[0]]
-    date_signal =  sf[0]
 
-    yyyy = date_signal.year
-    mm   = date_signal.month
-    dd   = date_signal.day
+    yyyy = t.year
+    mm   = t.month
+    dd   = t.day
         
     signal = pd.read_stata(f"{PATH_TO_SEC_DATA}\\signals\\v1\\signal{yyyy}-{mm}-{dd}.dta")
-    signal = signal[['ticker', 'Fret', 'Eret', 'fe', 'sd_resid']]
+    
+    signal = signal[['ticker', 'Fret', 'Eret', 'fe', 'sd_resid', 'Fret_extended', 'Eret_extended', 'fe_extended', 'sd_resid_extended']]
     df     = pd.merge(signal, df_agg, on =['ticker'])
     df     = pd.merge(df,    df2_agg, on =['ticker'])
     df     = df.sort_values(by = ['ticker'])
@@ -168,9 +180,21 @@ def retrieve_portfolio(t, information_sets, signal_files,
     #%%
     # Get stocks sorted
     # sort on Signal and take top ns and bottom nl
-    df = df.sort_values(by = [type_signal])
+    df['signal'] = df[type_signal]
 
-    tickers_long  = df.ticker[-(nl+1):-1]
+    if correct_precision:
+        # is it an extended signal?
+        # Drop the extremes
+        
+        df['signal'] =  df[type_signal] if 'extended' in type_signal else  df[type_signal] 
+
+        #df['signal']  = df['signal'][df['signal'].between( df['signal'].quantile(.001),  df['signal'].quantile(.999))] 
+        df = df[(np.abs(stats.zscore(df['signal'])) < 2.5)]
+    
+    df = df.dropna(subset=['signal'])
+    df = df.sort_values(by = ['signal'])
+
+    tickers_long  = df.ticker[-(nl+1):-1] 
     tickers_short = df.ticker[:ns]
     #%%
     return tickers_long, tickers_short, df.ticker

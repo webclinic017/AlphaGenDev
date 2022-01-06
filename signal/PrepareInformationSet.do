@@ -7,7 +7,7 @@ into a Stata readable format so that data can be loaded and unloaded faster
 
 local PATH_TO_SEC_DATA: env PATH_TO_SEC_DATA
 local max_y=real(substr("$S_DATE", -4, .))
-forv y=2009/`max_y'{
+forv y=2021/`max_y'{
 di "`y'"
 	qui{
 		/* Helps debugging */

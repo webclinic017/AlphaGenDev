@@ -443,7 +443,7 @@ def store_variable_definitions(vars):
 # %%
 if __name__=='__main__':
     update_all_data()
-    process_all_data(subset = 100)
+    process_all_data(subset = 200)
     aggregate_sec_data(full = True)
     append_compustat_sec(only_sec = True, full = True)
     

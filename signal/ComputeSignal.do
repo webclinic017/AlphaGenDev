@@ -25,12 +25,12 @@ Log:
 
 // Loops over all dates
 local start = mdy(1,1,2010)
-local end   = mdy(12,16,2021)
-forv t=`start'/`end'{
+local end   = mdy(1,6,2022)
+forv t=`end'/`end'{
 	if dow(`t')==4{
-	qui{
+	//qui{
 	local PATH_TO_SEC_DATA: env PATH_TO_SEC_DATA
-	//local t = mdy(10, 7, 2021)
+	//local t = mdy(1, 6, 2022)
 	di %td `t'
 
 	local y = year(`t') 
@@ -95,7 +95,7 @@ forv t=`start'/`end'{
 	
 	sum t_day if t_day < `t'
 	local last_day =`r(max)'
-	
+	di %td `last_day'
 	predict Eret if t_day== `last_day', xb
 	predict fe, u
 	
@@ -143,7 +143,7 @@ forv t=`start'/`end'{
 	keep if _n==1
 	save "`PATH_TO_SEC_DATA'\signals\v1\sp500`yy'-`mm'-`dd'.dta", replace
 
-		}
+		//}
 	}
 }
 		
