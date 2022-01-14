@@ -62,9 +62,9 @@ def load_data(re_load = False, minyy=2009):
     return information_sets
 
 def retrieve_portfolio(t, information_sets, 
-                       DD_tile = 2, 
-                       pliquid = 90, 
-                       minprice = 2, 
+                       DD_tile = 5, 
+                       pliquid = 95, 
+                       minprice = 1.0, 
                        nl = 25, 
                        ns = 25,
                        type_signal = 'Eret',
@@ -189,7 +189,7 @@ def retrieve_portfolio(t, information_sets,
         df['signal'] =  df[type_signal] if 'extended' in type_signal else  df[type_signal] 
 
         #df['signal']  = df['signal'][df['signal'].between( df['signal'].quantile(.001),  df['signal'].quantile(.999))] 
-        df = df[(np.abs(stats.zscore(df['signal'])) < 2.5)]
+        df = df[(np.abs(stats.zscore(df['signal'])) < 3)]
     
     df = df.dropna(subset=['signal'])
     df = df.sort_values(by = ['signal'])

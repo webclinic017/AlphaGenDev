@@ -47,7 +47,10 @@ class St(bt.Strategy):
         ('nl', 50),
         ('ns', 50),
         ('correct_precision' , False),
-        ('verbose' , True)
+        ('verbose' , True), 
+        ('DD_tile' , 5),
+        ('pliquid' , 95), 
+        ('minprice' , 1.0) 
     )
 
     def __init__(self):
