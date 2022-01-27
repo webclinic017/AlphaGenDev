@@ -42,6 +42,7 @@ SP500 = [e.lower() for e in df_sp500.Symbol]
 class StTest(bt.Strategy):
     """shorter strategy, focuses on analyzing the marginal impact of adding extra variables to the main model
     """
+    pass
 
 
 
