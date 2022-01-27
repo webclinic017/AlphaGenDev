@@ -22,6 +22,8 @@ from AlphaGenStrategies import *
 from matplotlib import pyplot as plt
 import pickle
 import time
+
+from scipy.optimize import basinhopping
 PATH_TO_SEC_DATA=os.environ['PATH_TO_SEC_DATA']
 
 # Unpickle tickers
@@ -30,7 +32,7 @@ with open(f'{PATH_TO_SEC_DATA}/cerebros/tickers', "rb") as input_file:
     tickers = pickle.load(input_file)
 
 # When to start
-initial_date = datetime(2010,1,1)
+initial_date = datetime(2015,1,1)
 last_date = datetime.today()
 # Adds commissions
 # 0.1% ... divide by 100 to remove the %
@@ -77,19 +79,33 @@ if firstTime:
 #%%
 
 
-# Create versions of strategies
-sts = [ {'nl': 50, 'ns':50, 'ts' : 'Eret', 'cp' : False},
- {'nl': 50, 'ns':50, 'ts' : 'Eret', 'cp' : True},
- {'nl': 50, 'ns':50, 'ts' : 'Fret', 'cp' : False},
- {'nl': 50, 'ns':50, 'ts' : 'Fret', 'cp' : True},
- {'nl': 50, 'ns':50, 'ts' : 'Eret_extended', 'cp' : False},
- {'nl': 50, 'ns':50, 'ts' : 'Eret_extended', 'cp' : True},
- {'nl': 50, 'ns':50, 'ts' : 'Fret_extended', 'cp' : False},
- {'nl': 50, 'ns':50, 'ts' : 'Fret_extended', 'cp' : True}]
+signals = ['Fret_extended']
+nls     = [25, 50, 100, 200]
+nss     = [25, 50, 100, 200]
+DDs     = [1, 5, 10]
+mps     = [ 1, 2, 5]
+pls     = [90, 95, 99]
+
+# IF I WANT JUST ONE
+nls     = [50]
+nss     = [25]
+DDs     = [5]
+mps     = [1]
+pls     = [95]
+
+                      
 
 
-for st in sts:
-    print("Unpickling Cerebro")
+def backtest(x):
+    st = {'nl': int(np.ceil(x[0])), 'ns': int(np.ceil(x[1])), 'ts' : 'Fret_extended', 'cp' : True, 'DD' : int(x[2]), 'mp' : int(x[3]), 'pl' : int(x[4])}
+
+    lower = np.array([25, 25, 1, 1, 90])
+    upper = np.array([100, 100, 10, 10, 99])
+
+    # HERE we check we are in the bounds
+    if not (len(lower <= np.array(x))==len(x) and len(np.array(x) <= upper)==len(x)):
+        return np.inf
+    #print(f"Running Strategy {st}")
     with open(f'{PATH_TO_SEC_DATA}/cerebros/cerebro_St', "rb") as input_file:
         cerebro = pickle.load(input_file)
 
@@ -104,14 +120,20 @@ for st in sts:
     cerebro.addstrategy(St, type_signal = st['ts'], 
                         nl=st['nl'], 
                         ns=st['ns'], 
-                        correct_precision = st['cp'])
+                        correct_precision = st['cp'],
+                        verbose = False, 
+                        DD_tile = st['DD'],
+                        pliquid = st['pl'],
+                        minprice = st['mp'])
+
+                        
 
     cp = 1 if st['cp']else 0
-    name_st = f"{st['ts']}-{st['tnl']}-{st['ns']}-{cp}"
-
-    print('Starting Portfolio Value: %.2f' % cerebro.broker.getvalue())
+    name_st = f"{st['ts']}-{st['nl']}-{st['ns']}-{cp}"
+    
+    #print('Starting Portfolio Value: %.2f' % cerebro.broker.getvalue())
     results =cerebro.run()
-    print('Final Portfolio Value: %.2f' % cerebro.broker.getvalue())
+    #print('Final Portfolio Value: %.2f' % cerebro.broker.getvalue())
 
 
     strat = results[0]
@@ -135,4 +157,34 @@ for st in sts:
     ben = df_bm['^GSPC']*df_bm['w_sp500']+df_bm['^IXIC']*df_bm['w_nasdaq']+df_bm['^RUT']*df_bm['w_rusell']
 
     ben.index = ben.index.rename('index')
-    pf.create_full_tear_sheet(returns,  benchmark_rets =ben)
+    ben = ben[(ben.index <= max(returns.index)) & (ben.index >= min(returns.index))]
+    # total returns of the strategy to have an idea of the best
+    total_ret = (1+returns).cumprod()-1
+    b_ret = total_ret[-1]   
+
+    #pf.create_full_tear_sheet(returns,  benchmark_rets =ben)
+    filename = f'{PATH_TO_SEC_DATA}/cerebros/returns_St{name_st}'
+    outfile = open(filename,'wb')
+    pickle.dump(returns,outfile)
+    outfile.close()
+    filename = f'{PATH_TO_SEC_DATA}/cerebros/benchmark_St{name_st}'
+    outfile = open(filename,'wb')
+    pickle.dump(ben,outfile)
+    outfile.close()
+    filename = f'{PATH_TO_SEC_DATA}/cerebros/transactions_St{name_st}'
+    outfile = open(filename,'wb')
+    pickle.dump(transactions,outfile)
+    outfile.close()
+    filename = f'{PATH_TO_SEC_DATA}/cerebros/positions_St{name_st}'
+    outfile = open(filename,'wb')
+    pickle.dump(positions,outfile)
+    outfile.close()
+
+    return -b_ret
+
+if __name__ == '__main__':
+    print(f"Starting basinhopping algorithm...")
+
+    x0 = [50, 50, 5, 2, 95]
+    ret = basinhopping(backtest, x0, niter=200, disp = True)
+    print("global minimum: x = %.4f, f(x0) = %.4f" % (ret.x, ret.fun))

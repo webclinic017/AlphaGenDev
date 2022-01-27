@@ -39,26 +39,43 @@ df_sp500 = pd.read_csv("https://raw.githubusercontent.com/datasets/s-and-p-500-c
 SP500 = [e.lower() for e in df_sp500.Symbol]
 
 #%%
-class St(bt.Strategy):
+class StTest(bt.Strategy):
+    """shorter strategy, focuses on analyzing the marginal impact of adding extra variables to the main model
+    """
 
+
+
+
+
+#%%
+class St(bt.Strategy):
+    """St : Base alphagen strategy
+
+    Args:
+        bt Strategy from the backtrader library
+
+    Returns:
+        A  backtest
+    """
     # Default, and keyword parameters of the strategy
     params = (
         ('type_signal', 'Eret'),
         ('nl', 50),
         ('ns', 50),
         ('correct_precision' , False),
-        ('verbose' , True), 
+        ('verbose' , False), 
         ('DD_tile' , 5),
         ('pliquid' , 95), 
         ('minprice' , 1.0) 
     )
 
     def __init__(self):
-        print("Initializing the Investment Strategy...")
-        print(f"Signal used: {self.params.type_signal}")
-        print(f"Number of long  positions: {self.params.nl}")
-        print(f"Number of short positions: {self.params.ns}")
-        print(f"Correcting the precision dividing by sd {self.params.correct_precision}")
+        if self.params.verbose:
+            print("Initializing the Investment Strategy...")
+            print(f"Signal used: {self.params.type_signal}")
+            print(f"Number of long  positions: {self.params.nl}")
+            print(f"Number of short positions: {self.params.ns}")
+            print(f"Correcting the precision dividing by sd {self.params.correct_precision}")
         self.information_sets = load_data()
         self.last_tickets    = []
         self.trades_in_month = 0
