@@ -5,9 +5,22 @@ into a Stata readable format so that data can be loaded and unloaded faster
 
 */
 
+// Addendum - Prepare other data to merge to the information set files
+local PATH_TO_SEC_DATA: env PATH_TO_SEC_DATA
+di "Data Stored in `PATH_TO_SEC_DATA'"
+use "`PATH_TO_SEC_DATA'\sentiment\daily_sentiment_dataset_preprocessed_v2.dta", clear
+
+gen t_day = date(date, "YMD")
+format %td t_day
+
+drop date*
+
+duplicates drop cik t_day, force
+save "`PATH_TO_SEC_DATA'\sentiment\sentiment.dta", replace
+
 local PATH_TO_SEC_DATA: env PATH_TO_SEC_DATA
 local max_y=real(substr("$S_DATE", -4, .))
-forv y=2021/`max_y'{
+forv y=2020/`max_y'{
 di "`y'"
 	qui{
 		/* Helps debugging */
@@ -108,6 +121,12 @@ di "`y'"
 		label var       dev_pe "Deviation of P/E from Industry"
 		label var     dev_prof "Deviation of Profitability from Industry"
 		label var           RL "Relative Leverage"
+		
+		duplicates drop cik t_day, force
+		// Merges with other data
+		merge 1:1 cik t_day using "`PATH_TO_SEC_DATA'\sentiment\sentiment.dta"
+		drop if _merge == 2
+		drop _merge
 
 		save "`PATH_TO_SEC_DATA'\information_set`y'.dta", replace
 	}

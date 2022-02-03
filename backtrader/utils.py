@@ -40,11 +40,16 @@ def timeit(method):
     return timed
 #%%
 
-def load_data(re_load = False, minyy=2009):
+def load_data(re_load = False, minyy=2009, experimental = False):
     # Utils, we create the information set in parquet format as csv takes too much to load
     signal_files=os.listdir(f"{PATH_TO_SEC_DATA}\\signals\\v1")
-    #Dates.Date(
-    signal_files=[datetime.strptime(file[6:-4], "%Y-%m-%d") for file in signal_files if file[0:6]=="signal"]
+    
+    if experimental:
+        signal_files=[datetime.strptime(file[8:-4], "%Y-%m-%d") for file in signal_files if file[0:6]=="signal" and 'VS' in file]
+    else:
+        signal_files=[datetime.strptime(file[6:-4], "%Y-%m-%d") for file in signal_files if file[0:6]=="signal"]
+
+    
 
     years = [d.year for d in signal_files]
     miny = min(years)
@@ -69,7 +74,8 @@ def retrieve_portfolio(t, information_sets,
                        ns = 25,
                        type_signal = 'Eret',
                        miny = 2010,
-                       correct_precision = False):
+                       correct_precision = False,
+                       experimental = False):
     """Function that retrieves a portfolio to invest at time t, to avoid excessive
        data preallocation by default we start in 2010
 
@@ -159,15 +165,19 @@ def retrieve_portfolio(t, information_sets,
     mm   = t.month
     dd   = t.day
         
-    signal = pd.read_stata(f"{PATH_TO_SEC_DATA}\\signals\\v1\\signal{yyyy}-{mm}-{dd}.dta")
+    if experimental:
+        signal = pd.read_stata(f"{PATH_TO_SEC_DATA}\\signals\\v1\\signalVS{yyyy}-{mm}-{dd}.dta")
+    else:
+        signal = pd.read_stata(f"{PATH_TO_SEC_DATA}\\signals\\v1\\signal{yyyy}-{mm}-{dd}.dta")
+        signal = signal[['ticker', 'Fret', 'Eret', 'fe', 'sd_resid', 'Fret_extended', 'Eret_extended', 'fe_extended', 'sd_resid_extended']]
     
-    signal = signal[['ticker', 'Fret', 'Eret', 'fe', 'sd_resid', 'Fret_extended', 'Eret_extended', 'fe_extended', 'sd_resid_extended']]
+    
     df     = pd.merge(signal, df_agg, on =['ticker'])
     df     = pd.merge(df,    df2_agg, on =['ticker'])
     df     = df.sort_values(by = ['ticker'])
 
     # Before Optimization
-    df = df.dropna()
+    df = df.dropna(subset = [type_signal])
 
     #%%
     df = df[df.DD >= np.percentile(df.DD, DD_tile, axis=0)]
